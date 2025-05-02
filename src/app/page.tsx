@@ -75,6 +75,7 @@ export default function Home() {
         photoDataUri: uploadedImage,
         description: description,
       });
+      console.log("Generated Sprite Sheet URI:", result.spriteSheetDataUri.substring(0, 100) + "..."); // Log generated URI
       setGeneratedSpriteSheet(result.spriteSheetDataUri);
       toast({
         title: 'Sprite Sheet Generated!',
@@ -151,13 +152,16 @@ export default function Home() {
 
   const handleSendToEditor = () => {
     if (generatedSpriteSheet) {
+      console.log("Sending generated sprite sheet to editor:", generatedSpriteSheet.substring(0, 100) + "...");
       setEditorImage(generatedSpriteSheet);
       toast({ title: "Generated sheet sent to editor" });
     } else if (uploadedImage) {
+        console.log("Sending uploaded image to editor:", uploadedImage.substring(0, 100) + "...");
         setEditorImage(uploadedImage);
         toast({ title: "Uploaded image sent to editor" });
     }
      else {
+         console.log("No image available to send to editor.");
        toast({ title: "No image available to send", variant: "destructive" });
     }
   }

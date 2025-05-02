@@ -97,6 +97,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
             ctx.drawImage(tempCanvas, 0, 0);
         }
      } else if (img) { // Fallback: Draw original image if history is empty
+         console.log("Drawing fallback image as history is empty or invalid index.");
          ctx.drawImage(img, 0, 0);
      }
 
@@ -190,15 +191,18 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
 
   // --- Image Loading & Initialization ---
   useEffect(() => {
-    console.log("Image URL Changed:", imageUrl);
+    console.log("SpriteEditor: Image URL Changed:", imageUrl?.substring(0, 100) + "...");
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     const img = new window.Image();
     img.crossOrigin = "anonymous"; // Allow loading cross-origin images for canvas manipulation
 
     img.onload = () => {
-       console.log("Image Loaded:", img.width, img.height);
-      if (!canvas || !ctx) return;
+       console.log("SpriteEditor: Image Loaded:", img.width, img.height);
+      if (!canvas || !ctx) {
+          console.error("SpriteEditor: Canvas or context not available on image load.");
+          return;
+      }
       imageRef.current = img;
 
       // Set canvas actual drawing surface size to match image
@@ -223,8 +227,9 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
            const initialOffsetY = (containerHeight - img.height * initialZoom) / 2;
            setOffset({ x: initialOffsetX, y: initialOffsetY });
            setZoom(initialZoom);
-           console.log("Initial zoom:", initialZoom, "Offset:", initialOffsetX, initialOffsetY);
+           console.log("SpriteEditor: Initial zoom:", initialZoom, "Offset:", initialOffsetX, initialOffsetY);
        } else {
+            console.warn("SpriteEditor: Could not find container element for initial centering.");
             setOffset({ x: 0, y: 0 }); // Fallback if no container
             setZoom(1);
        }
@@ -241,25 +246,45 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                  const initialImageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
                  setHistory([initialImageData]);
                  setHistoryIndex(0);
-                 console.log("Initial history saved from loaded image.");
+                 console.log("SpriteEditor: Initial history saved from loaded image.");
              } catch (e) {
-                  console.error("Error getting initial ImageData:", e);
+                  console.error("SpriteEditor: Error getting initial ImageData:", e);
                   // Handle CORS or other errors
+                  // If CORS error, try redrawing without getImageData (though editing won't work)
+                  if (e instanceof DOMException && e.name === 'SecurityError') {
+                     console.warn("SpriteEditor: Could not get ImageData due to CORS. Editing features may be limited.");
+                     // Set history with a placeholder or redraw differently?
+                     // For now, just clear history to avoid errors.
+                     setHistory([]);
+                     setHistoryIndex(-1);
+                     // Force a draw call with the original image ref (may still fail if tainted)
+                     requestAnimationFrame(() => draw());
+                  }
              }
+        } else {
+             console.error("SpriteEditor: Could not get temp context for initial history save.");
         }
     };
     img.onerror = (e) => {
-      console.error("Error loading image:", e);
+      console.error("SpriteEditor: Error loading image:", e, "from URL:", imageUrl?.substring(0, 100) + "...");
       if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       imageRef.current = null; setHistory([]); setHistoryIndex(-1); setSelection(null);
     }
-    img.src = imageUrl;
+    if (imageUrl) {
+        img.src = imageUrl;
+    } else {
+        console.warn("SpriteEditor: Received null or empty imageUrl.");
+        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        imageRef.current = null; setHistory([]); setHistoryIndex(-1); setSelection(null);
+    }
+
 
     return () => { imageRef.current = null; }; // Cleanup
-  }, [imageUrl]);
+  }, [imageUrl]); // Removed 'draw' from dependency array as it was causing potential infinite loops
 
     // Redraw whenever relevant state changes
     useEffect(() => {
+        console.log("SpriteEditor: Redrawing canvas due to state change.", { zoom, offset, selection: !!selection, historyIndex, tool });
         requestAnimationFrame(() => draw());
     }, [draw, zoom, offset, selection, historyIndex, tool]); // Added tool
 
