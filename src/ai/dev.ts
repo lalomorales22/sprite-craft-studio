@@ -1,2 +1,4 @@
+'use server';
 import '@/ai/flows/generate-sprite-sheet.ts';
-import '@/ai/flows/remove-background.ts'; // Add the new flow
+import '@/ai/flows/remove-background.ts';
+import '@/ai/flows/generate-world-background.ts'; // Add the new world generation flow
