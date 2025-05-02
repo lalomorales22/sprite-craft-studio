@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -308,7 +309,7 @@ export default function WorldPage() {
             <p>Space/W/Up: Jump</p>
             <p>Shift: Run</p>
             <p>S/Down: Crouch</p>
-            <p>C/X: Sit/Stand</p>
+            <p>C/X: Sit/Stand</p> {/* Changed 'Sit' to 'Armchair' conceptually */}
          </div>
       </div>
     </div>

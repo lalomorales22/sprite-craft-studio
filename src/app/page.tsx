@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, {useState} from 'react';
@@ -10,7 +11,8 @@ import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} f
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
 import Image from 'next/image';
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Sit, Square} from 'lucide-react';
+// Removed Sit icon, added Armchair
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square} from 'lucide-react';
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor'; // Import the new SpriteEditor component
 
@@ -228,7 +230,7 @@ export default function Home() {
                       running: <Footprints size={16} />,
                       jumping: <ArrowUp size={16} />,
                       crouching: <ArrowDown size={16} />,
-                      sitting: <Sit size={16}/>,
+                      sitting: <Armchair size={16}/>, // Use Armchair icon for sitting
                     };
                     return (
                       <div key={state} className="flex items-center gap-2 p-2 pixel-border bg-muted/50">
