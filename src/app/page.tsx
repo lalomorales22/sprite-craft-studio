@@ -120,13 +120,16 @@ export default function Home() {
 
      setIsRemovingEditorBackground(true);
      const originalEditorImage = editorImage; // Store original for potential comparison
+      console.log("Removing background from editor image:", originalEditorImage.substring(0, 100) + "...");
 
      try {
        const result = await removeBackground({ photoDataUri: editorImage });
+        console.log("Background removal result URI:", result.imageDataUri.substring(0, 100) + "...");
        setEditorImage(result.imageDataUri); // Update the editor image
 
         // If the original generated sheet was the one in the editor, update it too
        if (generatedSpriteSheet === originalEditorImage) {
+           console.log("Updating generatedSpriteSheet state with background removed image.");
            setGeneratedSpriteSheet(result.imageDataUri);
        }
 

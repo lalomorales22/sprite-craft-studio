@@ -23,7 +23,7 @@ export type RemoveBackgroundInput = z.infer<typeof RemoveBackgroundInputSchema>;
 const RemoveBackgroundOutputSchema = z.object({
   imageDataUri: z
     .string()
-    .describe("The image with the background removed as a data URI, preferably with a transparent background."),
+    .describe("The image with the background removed as a data URI, preferably with a transparent background (PNG)."),
 });
 export type RemoveBackgroundOutput = z.infer<typeof RemoveBackgroundOutputSchema>;
 
@@ -43,18 +43,20 @@ const removeBackgroundFlow = ai.defineFlow<
   async input => {
     console.log("Starting background removal flow for image:", input.photoDataUri.substring(0, 50) + "...");
     try {
-        const {media} = await ai.generate({
+        const {media, text} = await ai.generate({
           // IMPORTANT: ONLY the googleai/gemini-2.0-flash-exp model is able to generate images.
           model: 'googleai/gemini-2.0-flash-exp',
           prompt: [
             {media: {url: input.photoDataUri}},
-             // Updated prompt for clarity and specificity
-            {text: 'Identify the main subject(s) in this image. Remove everything else, making the background transparent (alpha channel). Preserve the subject(s) accurately. Output the resulting image.'},
+             // Updated prompt for more direct editing instruction
+            {text: 'Edit the provided image. Isolate the main figure(s) or character sprites. Make all background pixels transparent (use an alpha channel). Do not redraw or alter the style of the figure(s). Preserve the exact appearance of the foreground elements. Output the resulting image with the transparent background.'},
           ],
           config: {
             responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE
           },
         });
+
+        console.log("Background removal AI response text:", text); // Log the text response for debugging
 
         if (!media || !media.url) {
              console.error("Background removal flow: No media returned from AI generate.");
