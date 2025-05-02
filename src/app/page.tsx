@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, {useState} from 'react';
@@ -103,6 +102,17 @@ export default function Home() {
 
   const allSlotsFilled = Object.values(spriteSlots).every(slot => slot !== null);
 
+  const worldLinkHref = {
+      pathname: '/world',
+      query: { sprites: JSON.stringify(spriteSlots) },
+    };
+
+  // Debug log
+  // console.log("All Slots Filled:", allSlotsFilled);
+  // console.log("World Link Href:", worldLinkHref);
+  // console.log("Sprite Slots:", spriteSlots);
+
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -120,7 +130,8 @@ export default function Home() {
                </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-               <Link href="/world">
+               {/* Make sure this Link works */}
+               <Link href="/world" passHref>
                  <SidebarMenuButton tooltip="Game World">
                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-globe"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
                    <span>Game World</span>
@@ -198,7 +209,7 @@ export default function Home() {
          {/* Right Side: Editor and Assembly */}
         <Card className="flex-1 card-pixel flex flex-col">
            <CardHeader>
-             <CardTitle className="flex items-center gap-2"><Paintbrush /> Sprite Editor & Assembly</CardTitle>
+             <CardTitle className="flex items-center gap-2"><Paintbrush /> Sprite Editor &amp; Assembly</CardTitle>
              <CardDescription>Edit your sprite sheet and assign poses.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
@@ -220,7 +231,7 @@ export default function Home() {
               {/* Sprite Slots Area */}
              <div className="w-full md:w-1/3 space-y-2">
                 <h3 className="font-semibold">Assign Character Poses</h3>
-                <p className="text-xs text-muted-foreground mb-2">Drag edited sprites here.</p>
+                <p className="text-xs text-muted-foreground mb-2">Save edited sprites for each pose.</p> {/* Updated text */}
                 {Object.keys(spriteSlots).map((key) => {
                     const state = key as SpriteState;
                     const iconMap: Record<SpriteState, React.ReactNode> = {
@@ -251,13 +262,21 @@ export default function Home() {
               </div>
            </CardContent>
            <CardFooter className="justify-end">
-               <Link href={{ pathname: '/world', query: { sprites: JSON.stringify(spriteSlots) } }} passHref>
+               {/* Use the href object directly in the Link */}
+               <Link href={worldLinkHref} passHref legacyBehavior={allSlotsFilled ? undefined : true}>
                  <Button
                    disabled={!allSlotsFilled}
                    className="btn-pixel-accent"
                    aria-disabled={!allSlotsFilled} // Add aria-disabled for accessibility
+                   onClick={(e) => {
+                     if (!allSlotsFilled) {
+                       e.preventDefault(); // Prevent navigation if disabled
+                       toast({ title: "Missing Poses", description: "Please assign all character poses before entering the world.", variant: "destructive" });
+                     }
+                    // console.log("Button Clicked. All slots filled:", allSlotsFilled);
+                   }}
                   >
-                    Generate Character & Enter World
+                    Generate Character &amp; Enter World
                  </Button>
                </Link>
            </CardFooter>

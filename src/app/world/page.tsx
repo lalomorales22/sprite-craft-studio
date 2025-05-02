@@ -1,11 +1,11 @@
-
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation'; // Import useRouter
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 import { ArrowLeft } from 'lucide-react';
 
 // Define types for sprite states and slots
@@ -38,6 +38,8 @@ const WORLD_HEIGHT = 400; // Example world height
 
 export default function WorldPage() {
   const searchParams = useSearchParams();
+  const router = useRouter(); // Initialize useRouter
+  const { toast } = useToast(); // Initialize useToast
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,27 +61,44 @@ export default function WorldPage() {
 
   useEffect(() => {
     const spritesParam = searchParams.get('sprites');
+    // console.log("Raw spritesParam from URL:", spritesParam); // Debug log
+
     if (spritesParam) {
       try {
         const parsedSprites: SpriteSlots = JSON.parse(spritesParam);
-        // Validate if all required sprites are present
-        const requiredStates: SpriteState[] = ['standing', 'walkingLeft', 'walkingRight', 'running', 'jumping', 'crouching', 'sitting'];
-        const allPresent = requiredStates.every(state => parsedSprites[state]);
+        // console.log("Parsed Sprites:", parsedSprites); // Debug log
 
-        if (allPresent) {
+        // Validate if all required sprites are present and are strings (data URIs)
+        const requiredStates: SpriteState[] = ['standing', 'walkingLeft', 'walkingRight', 'running', 'jumping', 'crouching', 'sitting'];
+        const missingStates = requiredStates.filter(state => !parsedSprites[state] || typeof parsedSprites[state] !== 'string');
+
+        if (missingStates.length === 0) {
           setSpriteSlots(parsedSprites);
+          // console.log("Successfully set sprite slots."); // Debug log
         } else {
-          setError('Missing required sprite images. Please go back and complete character assembly.');
+          const errorMessage = `Missing or invalid sprite images for: ${missingStates.join(', ')}. Please go back and complete character assembly.`;
+          setError(errorMessage);
+          console.error(errorMessage); // Log error
+          // Optionally redirect back immediately or show error message
+           toast({ title: "Sprite Data Incomplete", description: errorMessage, variant: "destructive"});
+           router.push('/'); // Redirect if data is invalid
         }
       } catch (e) {
+        const errorMessage = 'Failed to parse sprite data. Please go back and try again.';
         console.error('Failed to parse sprites:', e);
-        setError('Invalid sprite data received. Please go back and try again.');
+        setError(errorMessage);
+         toast({ title: "Data Error", description: errorMessage, variant: "destructive"});
+         router.push('/'); // Redirect on parsing error
       }
     } else {
-      setError('No sprite data found. Please create a character first.');
+      const errorMessage = 'No sprite data found. Please create a character first.';
+      setError(errorMessage);
+      console.error(errorMessage); // Log error
+       toast({ title: "No Data", description: errorMessage, variant: "destructive"});
+       router.push('/'); // Redirect if no data found
     }
     setIsLoading(false);
-  }, [searchParams]);
+  }, [searchParams, router, toast]); // Add router and toast to dependencies
 
   // Keyboard event listeners
   useEffect(() => {
@@ -106,7 +125,7 @@ export default function WorldPage() {
 
   // Game loop for movement and physics
   useEffect(() => {
-    if (!spriteSlots) return; // Don't run game loop if no sprites
+    if (!spriteSlots || error) return; // Don't run game loop if no sprites or if there's an error
 
     const gameLoop = setInterval(() => {
       setCharacter(prev => {
@@ -135,11 +154,11 @@ export default function WorldPage() {
             state = isRunning ? 'running' : 'walkingRight'; // Use walkingRight for running right visually if no specific run right sprite
           } else {
             vx = 0;
-            state = 'standing'; // Default to standing if no movement keys
+            // Don't reset state to standing here immediately, handle below based on priority
           }
 
           // Handle Jumping (W or Space or Up Arrow)
-          if ((keysPressed.current['w'] || keysPressed.current[' '] || keysPressed.current['arrowup']) && !isJumping) {
+          if ((keysPressed.current['w'] || keysPressed.current[' '] || keysPressed.current['arrowup']) && !isJumping && y === GROUND_Y) { // Can only jump from ground
             vy = -JUMP_POWER;
             isJumping = true;
             state = 'jumping';
@@ -149,7 +168,7 @@ export default function WorldPage() {
           isCrouching = (keysPressed.current['s'] || keysPressed.current['arrowdown']) && !isJumping;
            if (isCrouching) {
                vx = 0; // Stop horizontal movement while crouching
-               state = 'crouching';
+               // Don't set state here, handle below
            }
         }
 
@@ -161,24 +180,7 @@ export default function WorldPage() {
         if (y >= GROUND_Y) {
           y = GROUND_Y;
           vy = 0;
-          if (isJumping) {
-             isJumping = false;
-             // If movement keys still held, resume walking/running state
-             if (keysPressed.current['a'] || keysPressed.current['arrowleft']) {
-                 state = isRunning ? 'running' : 'walkingLeft';
-             } else if (keysPressed.current['d'] || keysPressed.current['arrowright']) {
-                  state = isRunning ? 'running' : 'walkingRight';
-             } else if (keysPressed.current['s'] || keysPressed.current['arrowdown']) {
-                 state = 'crouching';
-             } else if (isSitting) { // Check sitting state after landing
-                 state = 'sitting';
-             }
-             else {
-                  state = 'standing';
-             }
-          } else if (!isSitting && !isCrouching && vx === 0) { // Only go to standing if not moving, sitting or crouching
-               state = 'standing';
-          }
+          isJumping = false; // Landed
         }
 
          // World boundaries
@@ -186,19 +188,23 @@ export default function WorldPage() {
          if (x > WORLD_WIDTH - 64) x = WORLD_WIDTH - 64; // Assuming character width is 64px
 
 
-        // Final state determination based on priority
-        if (isSitting) state = 'sitting';
-        else if (isJumping) state = 'jumping';
-        else if (isCrouching) state = 'crouching';
-        else if (vx !== 0) {
-            if(direction === 'left') state = isRunning ? 'running' : 'walkingLeft'; // Separate running left if available
-            else state = isRunning ? 'running' : 'walkingRight';
-            // If you add a specific 'runningLeft' sprite, adjust logic here
-             if (isRunning && direction === 'left' && spriteSlots.running) { // Assuming 'running' slot covers both directions or just right
-                state = 'running'; // If you have a specific running left, change here
-             }
+        // Determine final state based on priority (highest first)
+        if (isSitting) {
+            state = 'sitting';
+        } else if (isJumping) {
+            state = 'jumping';
+        } else if (isCrouching) {
+            state = 'crouching';
+            vx = 0; // Ensure stopped while crouching
+        } else if (vx !== 0) { // Moving horizontally
+            if (direction === 'left') {
+                state = isRunning ? (spriteSlots.running ? 'running' : 'walkingLeft') : 'walkingLeft'; // Use running if available, else walk
+            } else { // direction === 'right'
+                 state = isRunning ? (spriteSlots.running ? 'running' : 'walkingRight') : 'walkingRight'; // Use running if available, else walk
+            }
+        } else { // Not moving, not jumping, not crouching, not sitting
+            state = 'standing';
         }
-        else state = 'standing';
 
 
         return { ...prev, x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction };
@@ -206,63 +212,73 @@ export default function WorldPage() {
     }, 1000 / 60); // ~60 FPS
 
     return () => clearInterval(gameLoop);
-  }, [spriteSlots]); // Re-run effect if spriteSlots change
+  }, [spriteSlots, error]); // Re-run effect if spriteSlots change or error occurs
+
 
   const getCurrentSprite = () => {
-    if (!spriteSlots) return null;
+     if (!spriteSlots) return null;
 
-    let stateToUse = character.state;
+     let stateToUse = character.state;
+     let spriteUrl = spriteSlots[stateToUse];
+     let shouldMirror = false;
 
-    // Special handling for running left if separate sprite exists or needs mirroring
-    if (stateToUse === 'running' && character.direction === 'left' && spriteSlots.walkingLeft) {
-       // If no specific runningLeft sprite, maybe reuse walkingLeft or mirror running
-       return spriteSlots.walkingLeft; // Using walkingLeft as a placeholder for running left
-    }
-    if(stateToUse === 'running' && spriteSlots.running) { // If running state is set, use the running sprite (assuming it's for right or general)
-        return spriteSlots.running;
-    }
-    if(stateToUse === 'walkingLeft' && spriteSlots.walkingLeft) return spriteSlots.walkingLeft;
-    if(stateToUse === 'walkingRight' && spriteSlots.walkingRight) return spriteSlots.walkingRight;
+     // Handle running left: Use 'running' sprite and mirror it if no 'walkingLeft' exists for fallback
+     if (stateToUse === 'running' && character.direction === 'left') {
+         if (spriteSlots.running) { // Check if a generic running sprite exists
+             spriteUrl = spriteSlots.running;
+             shouldMirror = true; // Mirror the running sprite for left movement
+         } else if (spriteSlots.walkingLeft) {
+              spriteUrl = spriteSlots.walkingLeft; // Fallback to walking left if no running sprite
+         } else {
+              spriteUrl = spriteSlots.standing; // Ultimate fallback
+         }
+     } else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) {
+         // If walking right but no sprite, use walking left and mirror
+         spriteUrl = spriteSlots.walkingLeft;
+         shouldMirror = true;
+     } else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) {
+        // If walking left but no sprite, use walking right and mirror
+        spriteUrl = spriteSlots.walkingRight;
+        shouldMirror = true;
+     }
 
 
-    return spriteSlots[stateToUse] || spriteSlots.standing; // Fallback to standing
-  };
+     // Ensure fallback to standing if the determined state's sprite is missing
+     if (!spriteUrl) {
+         spriteUrl = spriteSlots.standing;
+         shouldMirror = false; // Don't mirror standing sprite typically
+     }
+
+     return { url: spriteUrl, mirror: shouldMirror };
+   };
 
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen"><p>Loading World...</p></div>;
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-center p-4">
-        <h2 className="text-2xl font-bold text-destructive mb-4">Error</h2>
-        <p className="mb-6">{error}</p>
-        <Link href="/">
-          <Button className="btn-pixel">
-             <ArrowLeft className="mr-2 h-4 w-4" /> Go Back to Editor
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  if (!spriteSlots) {
-    // This case should ideally be covered by the error state, but added for safety
+   // Display error message and back button if an error occurred during setup
+   if (error && !spriteSlots) {
      return (
-      <div className="flex flex-col items-center justify-center h-screen text-center p-4">
-        <h2 className="text-2xl font-bold text-destructive mb-4">Character Data Missing</h2>
-        <p className="mb-6">Could not load character sprites.</p>
-        <Link href="/">
-          <Button className="btn-pixel">
-             <ArrowLeft className="mr-2 h-4 w-4" /> Go Back to Editor
-          </Button>
-        </Link>
-      </div>
-    );
-  }
+       <div className="flex flex-col items-center justify-center h-screen text-center p-4">
+         <h2 className="text-2xl font-bold text-destructive mb-4">Error Loading World</h2>
+         <p className="mb-6">{error}</p>
+         <Link href="/">
+           <Button className="btn-pixel">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Go Back to Editor
+           </Button>
+         </Link>
+       </div>
+     );
+   }
 
-  const currentSpriteUrl = getCurrentSprite();
+  // This state should ideally not be reached if redirection works, but acts as a safeguard
+  if (!spriteSlots) {
+     return <div className="flex items-center justify-center h-screen"><p>Initializing character...</p></div>;
+   }
+
+
+  const currentSpriteData = getCurrentSprite();
 
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gray-700 relative overflow-hidden">
@@ -274,26 +290,30 @@ export default function WorldPage() {
       <div
         className="relative border-4 border-black bg-green-300" // Simple green background for the world
         style={{ width: `${WORLD_WIDTH}px`, height: `${WORLD_HEIGHT}px`, imageRendering: 'pixelated' }}
-        data-ai-hint="simple pixel game background ground grass" // AI Hint for world background
+        data-ai-hint="simple pixel game background ground grass sky" // AI Hint for world background
       >
-        {/* Add world elements here later, e.g., platforms, background details */}
-         <div className="absolute bottom-0 left-0 w-full h-10 bg-yellow-800" /> {/* Simple ground */}
+        {/* Simple Ground */}
+         <div className="absolute bottom-0 left-0 w-full h-10 bg-yellow-800" style={{bottom: `${WORLD_HEIGHT - GROUND_Y - 40}px`}}/> {/* Adjust ground position visually */}
+         {/* Simple Sky */}
+         <div className="absolute top-0 left-0 w-full h-[calc(100%-40px)] bg-blue-300" style={{height: `${WORLD_HEIGHT - (WORLD_HEIGHT - GROUND_Y)}px`}}/>
+
 
         {/* Character */}
-        {currentSpriteUrl && (
+        {currentSpriteData?.url && (
            <div
             ref={characterRef}
-            className="absolute bottom-0 transition-transform duration-75" // Position relative to bottom, adjust based on GROUND_Y
+            className="absolute transition-transform duration-75" // Simplified positioning logic slightly
             style={{
               left: `${character.x}px`,
-              bottom: `${WORLD_HEIGHT - character.y - 64}px`, // Adjust 64 based on sprite height
-              width: '64px', // Set fixed size for container
+              bottom: `${WORLD_HEIGHT - character.y - 64}px`, // Position based on bottom edge of sprite
+              width: '64px',
               height: '64px',
-              transform: character.state === 'running' && character.direction === 'left' ? 'scaleX(-1)' : 'scaleX(1)', // Mirror running sprite if needed and no walkingLeft available
+              transform: currentSpriteData.mirror ? 'scaleX(-1)' : 'scaleX(1)', // Apply mirroring based on logic
+              transformOrigin: 'center center',
             }}
           >
             <Image
-              src={currentSpriteUrl}
+              src={currentSpriteData.url}
               alt={`Character ${character.state}`}
               width={64}
               height={64}
@@ -304,12 +324,12 @@ export default function WorldPage() {
         )}
 
          {/* Instructions */}
-         <div className="absolute top-2 right-2 bg-black/50 text-white p-2 text-xs pixel-border">
-            <p>WASD/Arrows: Move</p>
+         <div className="absolute top-2 right-2 bg-black/50 text-white p-2 text-xs pixel-border z-10">
+            <p>Arrows/A/D: Move</p>
             <p>Space/W/Up: Jump</p>
             <p>Shift: Run</p>
             <p>S/Down: Crouch</p>
-            <p>C/X: Sit/Stand</p> {/* Changed 'Sit' to 'Armchair' conceptually */}
+            <p>C/X: Sit/Stand</p>
          </div>
       </div>
     </div>
