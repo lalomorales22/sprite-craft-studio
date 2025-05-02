@@ -1,6 +1,8 @@
+
 'use client';
 
 import React, {useState} from 'react';
+import {useRouter} from 'next/navigation'; // Import useRouter
 import {SidebarProvider, Sidebar, SidebarInset, SidebarTrigger, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from '@/components/ui/sidebar';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -10,14 +12,13 @@ import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} f
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
 import Image from 'next/image';
-// Removed Sit icon, added Armchair
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square} from 'lucide-react';
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe} from 'lucide-react'; // Added Globe
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor'; // Import the new SpriteEditor component
 
 // Define types for sprite states
 type SpriteState = 'standing' | 'walkingLeft' | 'walkingRight' | 'running' | 'jumping' | 'crouching' | 'sitting';
-type SpriteSlots = {
+export type SpriteSlots = { // Export SpriteSlots type
   [key in SpriteState]: string | null; // Store data URI or null
 };
 
@@ -37,6 +38,7 @@ export default function Home() {
     sitting: null,
   });
   const {toast} = useToast();
+  const router = useRouter(); // Initialize router
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -60,6 +62,8 @@ export default function Home() {
     }
 
     setIsLoading(true);
+    setGeneratedSpriteSheet(null); // Clear previous generation
+    setEditorImage(null);
     try {
       const result = await generateSpriteSheet({
         photoDataUri: uploadedImage,
@@ -90,8 +94,13 @@ export default function Home() {
     if (generatedSpriteSheet) {
       setEditorImage(generatedSpriteSheet);
       toast({ title: "Image sent to editor" });
-    } else {
-       toast({ title: "No image generated yet", variant: "destructive" });
+    } else if (uploadedImage) {
+        // Allow sending uploaded image directly if no generation happened
+        setEditorImage(uploadedImage);
+        toast({ title: "Uploaded image sent to editor" });
+    }
+     else {
+       toast({ title: "No image available to send", variant: "destructive" });
     }
   }
 
@@ -100,18 +109,24 @@ export default function Home() {
     toast({ title: `${state.charAt(0).toUpperCase() + state.slice(1)} sprite saved!`});
   };
 
+  const handleEnterWorld = () => {
+    const allSlotsFilled = Object.values(spriteSlots).every(slot => slot !== null);
+     if (allSlotsFilled) {
+        try {
+          // Save to sessionStorage
+          sessionStorage.setItem('spriteData', JSON.stringify(spriteSlots));
+          // Navigate programmatically
+          router.push('/world');
+        } catch (error) {
+           console.error("Error saving to sessionStorage or navigating:", error);
+           toast({ title: "Error", description: "Could not save character data or navigate to the world.", variant: "destructive" });
+        }
+     } else {
+        toast({ title: "Missing Poses", description: "Please assign all character poses before entering the world.", variant: "destructive" });
+     }
+  };
+
   const allSlotsFilled = Object.values(spriteSlots).every(slot => slot !== null);
-
-  const worldLinkHref = {
-      pathname: '/world',
-      query: { sprites: JSON.stringify(spriteSlots) },
-    };
-
-  // Debug log
-  // console.log("All Slots Filled:", allSlotsFilled);
-  // console.log("World Link Href:", worldLinkHref);
-  // console.log("Sprite Slots:", spriteSlots);
-
 
   return (
     <SidebarProvider>
@@ -130,10 +145,10 @@ export default function Home() {
                </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-               {/* Make sure this Link works */}
+               {/* Direct Link to /world, data will be checked there */}
                <Link href="/world" passHref>
-                 <SidebarMenuButton tooltip="Game World">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-globe"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                 <SidebarMenuButton tooltip="Game World Preview">
+                   <Globe size={16}/> {/* Use Globe icon */}
                    <span>Game World</span>
                  </SidebarMenuButton>
                </Link>
@@ -149,24 +164,24 @@ export default function Home() {
         <Card className="flex-1 card-pixel">
           <CardHeader>
              <SidebarTrigger className="md:hidden mb-2" />
-            <CardTitle className="flex items-center gap-2"><Upload /> Generate Sprite Sheet</CardTitle>
-            <CardDescription>Upload an image and describe your character.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Upload /> 1. Generate or Upload</CardTitle>
+            <CardDescription>Upload an image and describe your character, or just upload a sprite sheet.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="image-upload" className="flex items-center gap-2 cursor-pointer">
+              <Label htmlFor="image-upload" className="flex items-center gap-2 cursor-pointer btn-pixel-secondary justify-center">
                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-image-up"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19.5 3-3 3 3"/><path d="M17 22v-5.5"/><circle cx="9" cy="9" r="2"/></svg>
-                 Upload Image
+                 Upload Image/Sprite Sheet
               </Label>
               <Input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="input-pixel sr-only" />
                {uploadedImage && (
-                 <div className="mt-2 pixel-border p-1 inline-block">
+                 <div className="mt-2 pixel-border p-1 inline-block bg-white">
                     <Image src={uploadedImage} alt="Uploaded preview" width={128} height={128} className="object-contain" style={{ imageRendering: 'pixelated' }} />
                  </div>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Character Description</Label>
+              <Label htmlFor="description">Character Description (for Generation)</Label>
               <Textarea
                 id="description"
                 placeholder="e.g., A brave knight with shiny armor, A mystical wizard with a long beard"
@@ -184,8 +199,8 @@ export default function Home() {
                </div>
             )}
           </CardContent>
-          <CardFooter>
-            <Button onClick={handleGenerateSprite} disabled={isLoading} className="btn-pixel w-full">
+          <CardFooter className="flex-col sm:flex-row gap-2">
+            <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel w-full sm:w-auto flex-1">
               {isLoading ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -198,19 +213,17 @@ export default function Home() {
                 'Generate Sprite Sheet'
               )}
             </Button>
-             {generatedSpriteSheet && (
-                 <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary ml-2">
-                   Send to Editor
-                 </Button>
-             )}
+            <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary w-full sm:w-auto" disabled={!generatedSpriteSheet && !uploadedImage}>
+                Send to Editor
+            </Button>
           </CardFooter>
         </Card>
 
          {/* Right Side: Editor and Assembly */}
         <Card className="flex-1 card-pixel flex flex-col">
            <CardHeader>
-             <CardTitle className="flex items-center gap-2"><Paintbrush /> Sprite Editor &amp; Assembly</CardTitle>
-             <CardDescription>Edit your sprite sheet and assign poses.</CardDescription>
+             <CardTitle className="flex items-center gap-2"><Paintbrush /> 2. Edit &amp; Assign Poses</CardTitle>
+             <CardDescription>Select parts of your sheet and save them for each character pose.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
               {/* Editor Canvas Area */}
@@ -222,16 +235,16 @@ export default function Home() {
                      spriteSlots={spriteSlots}
                   />
                  ) : (
-                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                     <p>Generate or upload a sprite sheet to start editing.</p>
+                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground p-4 text-center">
+                     <p>Generate or upload a sprite sheet and click 'Send to Editor' to start.</p>
                    </div>
                  )}
               </div>
 
               {/* Sprite Slots Area */}
              <div className="w-full md:w-1/3 space-y-2">
-                <h3 className="font-semibold">Assign Character Poses</h3>
-                <p className="text-xs text-muted-foreground mb-2">Save edited sprites for each pose.</p> {/* Updated text */}
+                <h3 className="font-semibold">Character Poses</h3>
+                <p className="text-xs text-muted-foreground mb-2">Required poses for the game world.</p>
                 {Object.keys(spriteSlots).map((key) => {
                     const state = key as SpriteState;
                     const iconMap: Record<SpriteState, React.ReactNode> = {
@@ -241,47 +254,43 @@ export default function Home() {
                       running: <Footprints size={16} />,
                       jumping: <ArrowUp size={16} />,
                       crouching: <ArrowDown size={16} />,
-                      sitting: <Armchair size={16}/>, // Use Armchair icon for sitting
+                      sitting: <Armchair size={16}/>,
                     };
                     return (
-                      <div key={state} className="flex items-center gap-2 p-2 pixel-border bg-muted/50">
-                        <div className="flex-shrink-0 w-16 h-16 pixel-border bg-white flex items-center justify-center">
+                      <div key={state} className={`flex items-center gap-2 p-2 pixel-border ${spriteSlots[state] ? 'pixel-border-primary bg-primary/10' : 'bg-muted/50'}`}>
+                        <div className="flex-shrink-0 w-16 h-16 pixel-border bg-white flex items-center justify-center overflow-hidden">
                           {spriteSlots[state] ? (
-                            <Image src={spriteSlots[state]!} alt={`${state} sprite`} width={64} height={64} style={{ imageRendering: 'pixelated' }} />
+                            <Image src={spriteSlots[state]!} alt={`${state} sprite`} width={64} height={64} style={{ imageRendering: 'pixelated', objectFit: 'contain' }} />
                           ) : (
-                             <div className="w-full h-full bg-gray-300"/> // Placeholder square
+                             <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-4xl">?</div> // Placeholder square
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-sm font-medium">
                           {iconMap[state]}
                           <span>{state.charAt(0).toUpperCase() + state.slice(1)}</span>
                         </div>
+                         {spriteSlots[state] && <span className="ml-auto text-green-600">✓</span>}
                       </div>
                     );
                   })}
               </div>
            </CardContent>
            <CardFooter className="justify-end">
-               {/* Use the href object directly in the Link */}
-               <Link href={worldLinkHref} passHref legacyBehavior={allSlotsFilled ? undefined : true}>
-                 <Button
-                   disabled={!allSlotsFilled}
-                   className="btn-pixel-accent"
-                   aria-disabled={!allSlotsFilled} // Add aria-disabled for accessibility
-                   onClick={(e) => {
-                     if (!allSlotsFilled) {
-                       e.preventDefault(); // Prevent navigation if disabled
-                       toast({ title: "Missing Poses", description: "Please assign all character poses before entering the world.", variant: "destructive" });
-                     }
-                    // console.log("Button Clicked. All slots filled:", allSlotsFilled);
-                   }}
-                  >
-                    Generate Character &amp; Enter World
-                 </Button>
-               </Link>
+              {/* Button uses programmatic navigation */}
+              <Button
+                onClick={handleEnterWorld}
+                disabled={!allSlotsFilled}
+                className="btn-pixel-accent"
+                aria-disabled={!allSlotsFilled}
+              >
+                Enter World with Character
+              </Button>
            </CardFooter>
         </Card>
       </SidebarInset>
     </SidebarProvider>
   );
 }
+
+// Add type export for world page
+export type { SpriteState };
