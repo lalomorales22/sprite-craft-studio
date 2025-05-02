@@ -3,78 +3,101 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Pixelify Sans', system-ui, sans-serif; /* Using a pixel-style font */
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --background: 210 40% 98%; /* Lighter gray for background */
+    --foreground: 210 40% 20%; /* Darker gray for text */
+
+    --card: 210 40% 98%;
+    --card-foreground: 210 40% 20%;
+
+    --popover: 210 40% 98%;
+    --popover-foreground: 210 40% 20%;
+
+    --primary: 180 100% 25.1%; /* #008080 Deep Teal */
+    --primary-foreground: 180 100% 95%; /* Lighter color for text on primary */
+
+    --secondary: 0 0% 50.2%; /* #808080 Muted Gray */
+    --secondary-foreground: 0 0% 98%; /* White text on gray */
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 210 40% 45.1%;
+
+    --accent: 336 100% 71%; /* #FF69B4 Bright Pink */
+    --accent-foreground: 0 0% 5%; /* Dark text on accent */
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --border: 0 0% 80%; /* Adjusted border to fit gray theme */
+    --input: 0 0% 85%; /* Adjusted input to fit gray theme */
+    --ring: 180 100% 25.1%; /* Teal ring for focus */
+
+    --chart-1: 180 76% 61%;
+    --chart-2: 336 58% 70%;
+    --chart-3: 0 0% 60%;
+    --chart-4: 180 40% 40%;
+    --chart-5: 336 87% 80%;
+
+    --radius: 0.3rem; /* Slightly sharper corners */
+
+    --sidebar-background: 0 0% 90%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 180 100% 25.1%;
+    --sidebar-primary-foreground: 180 100% 95%;
+    --sidebar-accent: 0 0% 80%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 75%;
+    --sidebar-ring: 180 100% 25.1%;
   }
+
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    /* Define dark mode colors if needed, derived from the light theme */
+    --background: 210 20% 12%;
+    --foreground: 210 20% 90%;
+
+    --card: 210 20% 12%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 210 20% 10%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 180 100% 35%; /* Slightly lighter teal for dark mode */
+    --primary-foreground: 180 100% 95%;
+
+    --secondary: 0 0% 30%; /* Darker gray */
+    --secondary-foreground: 0 0% 80%;
+
+    --muted: 210 20% 20%;
+    --muted-foreground: 210 20% 60%;
+
+    --accent: 336 100% 65%; /* Slightly adjusted pink */
+    --accent-foreground: 0 0% 5%;
+
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --border: 0 0% 25%;
+    --input: 0 0% 22%;
+    --ring: 180 100% 35%;
+
+    --chart-1: 180 70% 50%;
+    --chart-2: 336 60% 60%;
+    --chart-3: 0 0% 50%;
+    --chart-4: 180 40% 30%;
+    --chart-5: 336 80% 70%;
+
+    --sidebar-background: 0 0% 15%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 180 100% 35%;
+    --sidebar-primary-foreground: 180 100% 95%;
+    --sidebar-accent: 0 0% 25%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 180 100% 35%;
   }
 }
 
@@ -84,5 +107,71 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    image-rendering: pixelated; /* Ensure pixel art looks crisp */
   }
+  /* Add pixelated font */
+  @import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap');
+}
+
+/* Custom utility for pixelated borders */
+@layer components {
+  .pixel-border {
+    border-style: solid;
+    border-width: 4px;
+    border-image-slice: 2;
+    border-image-width: 2;
+    border-image-repeat: stretch;
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23808080" /></svg>'); /* Muted Gray */
+    border-image-outset: 0;
+  }
+  .pixel-border-accent {
+     border-style: solid;
+    border-width: 4px;
+    border-image-slice: 2;
+    border-image-width: 2;
+    border-image-repeat: stretch;
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23FF69B4" /></svg>'); /* Accent Pink */
+    border-image-outset: 0;
+  }
+   .pixel-border-primary {
+     border-style: solid;
+    border-width: 4px;
+    border-image-slice: 2;
+    border-image-width: 2;
+    border-image-repeat: stretch;
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23008080" /></svg>'); /* Primary Teal */
+    border-image-outset: 0;
+  }
+
+  /* Ensure buttons have a pixelated feel */
+   .btn-pixel {
+      @apply bg-primary text-primary-foreground hover:bg-primary/90 pixel-border-primary px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+      transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+   }
+   .btn-pixel:active {
+      @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+   }
+   .btn-pixel-secondary {
+       @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 pixel-border px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+       transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+   }
+    .btn-pixel-secondary:active {
+       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+   }
+    .btn-pixel-accent {
+       @apply bg-accent text-accent-foreground hover:bg-accent/90 pixel-border-accent px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+       transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+   }
+     .btn-pixel-accent:active {
+       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+   }
+
+   .input-pixel {
+     @apply bg-background border-input pixel-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm rounded-none;
+   }
+
+    .card-pixel {
+     @apply bg-card text-card-foreground pixel-border rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)];
+   }
+
 }
