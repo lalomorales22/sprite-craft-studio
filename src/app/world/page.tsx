@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input'; // Import Input
 import { Label } from '@/components/ui/label'; // Import Label
 import { useToast } from '@/hooks/use-toast'; // Import useToast
-import { ArrowLeft, Download, Image as ImageIcon, Sparkles } from 'lucide-react'; // Added Download, ImageIcon, Sparkles
+import { ArrowLeft, Download, Image as ImageIcon, Sparkles, ArrowRight } from 'lucide-react'; // Added Download, ImageIcon, Sparkles, ArrowRight
 import { generateWorldBackground } from '@/ai/flows/generate-world-background'; // Import the new flow
 import type { SpriteState, SpriteSlots } from '@/app/page'; // Import types from page.tsx
 
@@ -34,6 +34,8 @@ const JUMP_POWER = 10;
 const GROUND_Y = 300; // Adjust as needed based on world background
 const WORLD_WIDTH = 800; // Example world width
 const WORLD_HEIGHT = 400; // Example world height
+const CHARACTER_WIDTH = 64; // Assuming character width is 64px
+const TRANSITION_THRESHOLD = WORLD_WIDTH - CHARACTER_WIDTH; // Point where transition starts
 
 export default function WorldPage() {
   const router = useRouter(); // Initialize useRouter
@@ -44,8 +46,10 @@ export default function WorldPage() {
   const characterRef = useRef<HTMLDivElement>(null);
   const keysPressed = useRef<Record<string, boolean>>({});
   const gameLoopIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref for interval ID
+  const isTransitioningRef = useRef(false); // Ref to prevent multiple transitions
 
-  const [worldDescription, setWorldDescription] = useState('');
+  const [initialWorldDescription, setInitialWorldDescription] = useState(''); // For the input field
+  const [currentWorldDescription, setCurrentWorldDescription] = useState(''); // For regeneration
   const [generatedWorldBackground, setGeneratedWorldBackground] = useState<string | null>(null);
   const [isGeneratingWorld, setIsGeneratingWorld] = useState(false);
 
@@ -110,7 +114,8 @@ export default function WorldPage() {
         }
       keysPressed.current[event.key.toLowerCase()] = true;
       if (event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 'x') {
-         setCharacter(prev => ({...prev, isSitting: !prev.isSitting, isCrouching: false, vx: 0}));
+         // Toggle sitting only if on the ground
+         setCharacter(prev => (prev.y === GROUND_Y ? {...prev, isSitting: !prev.isSitting, isCrouching: false, vx: 0} : prev));
       }
     };
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -130,7 +135,36 @@ export default function WorldPage() {
     };
   }, []);
 
-  // Game loop for movement and physics
+
+  // Function to generate world background, now using currentWorldDescription
+  const handleGenerateWorld = useCallback(async (description: string) => {
+    if (!description) {
+      toast({ title: "Missing Description", description: "Cannot generate world without a description.", variant: "destructive" });
+      return false; // Indicate failure
+    }
+    setIsGeneratingWorld(true);
+    // Keep the old background while generating for smoother transition? Or clear it?
+    // setGeneratedWorldBackground(null); // Option: Clear immediately
+    try {
+      const result = await generateWorldBackground({ description: description });
+      setGeneratedWorldBackground(result.worldImageDataUri);
+      setCurrentWorldDescription(description); // Update the current description used for regeneration
+      if (!initialWorldDescription) { // Set initial only once
+          setInitialWorldDescription(description);
+      }
+      toast({ title: "World Background Generated!", description: "The AI has created a background." });
+      return true; // Indicate success
+    } catch (error) {
+      console.error("Error generating world background:", error);
+      toast({ title: "Generation Failed", description: `Could not generate world background. ${error instanceof Error ? error.message : 'Try again.'}`, variant: "destructive" });
+      return false; // Indicate failure
+    } finally {
+      setIsGeneratingWorld(false);
+    }
+  }, [toast, initialWorldDescription]); // Depend on toast and initial description state
+
+
+  // Game loop for movement, physics, and transitions
   useEffect(() => {
     if (!spriteSlots || error || isLoading) {
         if (gameLoopIntervalRef.current) {
@@ -142,87 +176,135 @@ export default function WorldPage() {
 
     if (!gameLoopIntervalRef.current) {
         gameLoopIntervalRef.current = setInterval(() => {
-            setCharacter(prev => {
-            let { x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction } = prev;
+            if (isTransitioningRef.current) return; // Skip updates during transition
 
-            if (isSitting) {
-                vx = 0;
-                vy = 0;
-                state = 'sitting';
-            } else {
+            setCharacter(prev => {
+                let { x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction } = prev;
+
+                // --- Vertical Movement (Gravity & Jumping) ---
                 vy += GRAVITY;
+                y += vy;
+
+                // Ground collision
+                if (y >= GROUND_Y) {
+                    y = GROUND_Y;
+                    vy = 0;
+                    if (isJumping) isJumping = false; // Landed
+                }
+
+                // --- Horizontal Movement & State ---
                 isRunning = keysPressed.current['shift'] === true;
                 const currentSpeed = isRunning ? RUN_SPEED : MOVE_SPEED;
-                isCrouching = (keysPressed.current['s'] || keysPressed.current['arrowdown']) && !isJumping;
 
-                if (!isCrouching) {
+                // Handle Sitting state (only on ground)
+                if (isSitting && y !== GROUND_Y) {
+                    isSitting = false; // Force stand up if not on ground
+                }
+
+                // Handle Crouching state (only on ground)
+                isCrouching = (keysPressed.current['s'] || keysPressed.current['arrowdown']) && !isJumping && !isSitting && y === GROUND_Y;
+
+                if (isSitting) {
+                    vx = 0; // No movement while sitting
+                    state = 'sitting';
+                } else if (isCrouching) {
+                    vx = 0; // No movement while crouching
+                    state = 'crouching';
+                } else {
+                    // Horizontal input
                     if (keysPressed.current['a'] || keysPressed.current['arrowleft']) {
                         vx = -currentSpeed;
                         direction = 'left';
-                        state = isRunning ? 'running' : 'walkingLeft';
                     } else if (keysPressed.current['d'] || keysPressed.current['arrowright']) {
                         vx = currentSpeed;
                         direction = 'right';
-                        state = isRunning ? 'running' : 'walkingRight';
                     } else {
-                        vx = 0;
+                        vx = 0; // No horizontal input
                     }
-                } else {
-                    vx = 0;
+
+                    // Jump input (only if on ground and not sitting/crouching)
+                    if ((keysPressed.current['w'] || keysPressed.current[' '] || keysPressed.current['arrowup']) && !isJumping && y === GROUND_Y) {
+                        vy = -JUMP_POWER;
+                        isJumping = true;
+                    }
                 }
 
-                if ((keysPressed.current['w'] || keysPressed.current[' '] || keysPressed.current['arrowup']) && !isJumping && !isCrouching && y === GROUND_Y) {
-                    vy = -JUMP_POWER;
-                    isJumping = true;
+                // Apply horizontal movement
+                x += vx;
+
+                // --- World Boundaries & Transitions ---
+                if (x < 0) {
+                    x = 0; // Stop at left edge
+                    vx = 0;
+                } else if (x > TRANSITION_THRESHOLD) {
+                    // Trigger Transition to next level
+                    x = TRANSITION_THRESHOLD; // Temporarily stop at edge
+                    vx = 0;
+                    if (!isTransitioningRef.current && generatedWorldBackground && currentWorldDescription) {
+                        isTransitioningRef.current = true; // Prevent multiple triggers
+                        console.log("Transitioning to next level...");
+                        toast({ title: "Moving to next area...", description: "Generating new background..." });
+
+                        // Generate new world and handle reset in async way
+                        handleGenerateWorld(currentWorldDescription + " continue the scene to the right, showing a connected area")
+                            .then((success) => {
+                                if (success) {
+                                    console.log("New world generated, resetting character position.");
+                                    // Reset character to the left side after new world is ready
+                                    setCharacter(prevChar => ({
+                                        ...prevChar,
+                                        x: 10, // Start slightly in from the left edge
+                                        y: GROUND_Y, // Ensure on ground
+                                        vx: 0,
+                                        vy: 0,
+                                        isJumping: false,
+                                        state: 'standing' // Reset state
+                                    }));
+                                } else {
+                                    // Handle generation failure - maybe stay in current level?
+                                    console.error("Failed to generate next level background.");
+                                     setCharacter(prevChar => ({ ...prevChar, x: TRANSITION_THRESHOLD -1 })); // Move back slightly if failed
+                                }
+                            })
+                            .finally(() => {
+                                isTransitioningRef.current = false; // Allow updates and transitions again
+                            });
+                    }
+                }
+
+                // --- Determine final animation state ---
+                if (isSitting) {
+                    state = 'sitting';
+                } else if (isJumping) {
                     state = 'jumping';
+                } else if (isCrouching) {
+                    state = 'crouching';
+                } else if (vx !== 0) { // Moving horizontally
+                    if (direction === 'left') {
+                        state = (isRunning && spriteSlots.running) ? 'running' : 'walkingLeft';
+                    } else { // direction === 'right'
+                        state = (isRunning && spriteSlots.running) ? 'running' : 'walkingRight';
+                    }
+                } else { // Standing still
+                    state = 'standing';
                 }
 
-                if (isCrouching) {
-                    vx = 0;
-                }
-            }
 
-            x += vx;
-            y += vy;
-
-            if (y >= GROUND_Y) {
-                y = GROUND_Y;
-                vy = 0;
-                isJumping = false;
-            }
-
-            if (x < 0) x = 0;
-            if (x > WORLD_WIDTH - 64) x = WORLD_WIDTH - 64;
-
-            if (isSitting) {
-                state = 'sitting';
-            } else if (isJumping) {
-                state = 'jumping';
-            } else if (isCrouching) {
-                state = 'crouching';
-                vx = 0;
-            } else if (vx !== 0) {
-                if (direction === 'left') {
-                    state = isRunning ? (spriteSlots.running ? 'running' : 'walkingLeft') : 'walkingLeft';
-                } else {
-                    state = isRunning ? (spriteSlots.running ? 'running' : 'walkingRight') : 'walkingRight';
-                }
-            } else {
-                state = 'standing';
-            }
-
-            return { ...prev, x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction };
+                return { ...prev, x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction };
             });
-        }, 1000 / 60);
+        }, 1000 / 60); // 60 FPS
     }
 
+    // Cleanup interval on unmount or when dependencies change
     return () => {
         if (gameLoopIntervalRef.current) {
             clearInterval(gameLoopIntervalRef.current);
             gameLoopIntervalRef.current = null;
+            isTransitioningRef.current = false; // Reset transition lock on cleanup
         }
     };
-  }, [spriteSlots, error, isLoading]);
+  }, [spriteSlots, error, isLoading, handleGenerateWorld, currentWorldDescription, toast]); // Dependencies for game loop
+
 
   const getCurrentSprite = useCallback(() => {
      if (!spriteSlots) return null;
@@ -231,39 +313,35 @@ export default function WorldPage() {
      let spriteUrl = spriteSlots[stateToUse];
      let shouldMirror = false;
 
-      if (stateToUse === 'running' && character.direction === 'left') {
-         if (spriteSlots.running) {
-             spriteUrl = spriteSlots.running;
-             shouldMirror = true;
-         } else {
-             spriteUrl = spriteSlots.walkingLeft || spriteSlots.standing;
-             shouldMirror = false;
-         }
-     }
-     else if (stateToUse === 'running' && character.direction === 'right') {
+      // Handle running animation mirroring/fallback
+      if (stateToUse === 'running') {
           if (spriteSlots.running) {
               spriteUrl = spriteSlots.running;
-              shouldMirror = false;
+              shouldMirror = character.direction === 'left';
           } else {
-              spriteUrl = spriteSlots.walkingRight || spriteSlots.standing;
-              shouldMirror = false;
+              // Fallback to walking if running sprite doesn't exist
+              spriteUrl = character.direction === 'left' ? spriteSlots.walkingLeft : spriteSlots.walkingRight;
+              shouldMirror = false; // Walking sprites are directional
           }
       }
-     else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) {
+      // Handle walking mirroring/fallback if one direction is missing
+      else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) {
          spriteUrl = spriteSlots.walkingLeft;
-         shouldMirror = true;
-     }
+         shouldMirror = true; // Mirror left-walk for right-walk
+      }
       else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) {
          spriteUrl = spriteSlots.walkingRight;
-         shouldMirror = true;
+         shouldMirror = true; // Mirror right-walk for left-walk
       }
 
+     // Fallback for missing states (including walking if fallbacks failed)
      if (!spriteUrl) {
          console.warn(`Sprite for state "${stateToUse}" is missing. Falling back to "standing".`);
          spriteUrl = spriteSlots.standing;
          shouldMirror = false;
      }
 
+     // Critical fallback if standing is also missing
      if (!spriteUrl) {
          console.error("Critical error: Standing sprite is missing!");
          return null;
@@ -272,24 +350,12 @@ export default function WorldPage() {
      return { url: spriteUrl, mirror: shouldMirror };
    }, [character.state, character.direction, spriteSlots]);
 
-  const handleGenerateWorld = async () => {
-    if (!worldDescription) {
-        toast({title: "Missing Description", description: "Please describe the world you want to create.", variant: "destructive"});
-        return;
-    }
-    setIsGeneratingWorld(true);
-    setGeneratedWorldBackground(null);
-    try {
-        const result = await generateWorldBackground({description: worldDescription});
-        setGeneratedWorldBackground(result.worldImageDataUri);
-        toast({title: "World Background Generated!", description: "The AI has created a background for your world."});
-    } catch (error) {
-        console.error("Error generating world background:", error);
-        toast({title: "Generation Failed", description: `Could not generate the world background. ${error instanceof Error ? error.message : 'Please try again.'}`, variant: "destructive"});
-    } finally {
-        setIsGeneratingWorld(false);
-    }
-  };
+
+   // Handles the initial world generation from the input field
+   const handleInitialGenerate = () => {
+        handleGenerateWorld(initialWorldDescription);
+   }
+
 
    // Function to handle game export
   const handleExportGame = () => {
@@ -303,7 +369,7 @@ export default function WorldPage() {
       const gameData = {
         sprites: spriteSlots,
         worldBackground: generatedWorldBackground,
-        // Add other relevant game state if needed (e.g., initial character position)
+        initialWorldDescription: currentWorldDescription, // Export the description used for the *current* background
       };
 
       // 2. Create a Blob from the JSON data
@@ -322,7 +388,7 @@ export default function WorldPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      toast({ title: "Game Data Exported!", description: "Your character and world data have been saved to a JSON file." });
+      toast({ title: "Game Data Exported!", description: "Your character and world data have been saved." });
 
     } catch (error) {
       console.error("Error exporting game data:", error);
@@ -352,9 +418,10 @@ export default function WorldPage() {
   if (!spriteSlots && !isLoading) {
      console.error("World loaded but sprite slots are still null without an error.");
      if (!error) {
-       toast({ title: "Initialization Error", description: "Character data failed to load correctly.", variant: "destructive", duration: 5000 });
-       router.push('/');
+       // Redirecting in useEffect now, but add a fallback message
+        return <div className="flex items-center justify-center h-screen"><p>Failed to initialize character data. Redirecting...</p></div>;
      }
+     // If there was an error recorded, the error screen above should render
      return <div className="flex items-center justify-center h-screen"><p>Failed to initialize character.</p></div>;
    }
 
@@ -370,39 +437,41 @@ export default function WorldPage() {
           </Button>
         </Link>
 
-        {/* World Generation Controls */}
-        <div className="mb-4 p-4 pixel-border bg-card text-card-foreground w-full max-w-3xl flex flex-col sm:flex-row gap-2 items-center z-20">
-            <Label htmlFor="world-description" className="flex-shrink-0 mr-2 font-semibold">World Prompt:</Label>
-            <Input
-                id="world-description"
-                type="text"
-                value={worldDescription}
-                onChange={(e) => setWorldDescription(e.target.value)}
-                placeholder="e.g., magical forest, futuristic city ruins, lava cave"
-                className="input-pixel flex-grow"
-                disabled={isGeneratingWorld}
-            />
-            <Button
-                onClick={handleGenerateWorld}
-                disabled={isGeneratingWorld || !worldDescription}
-                className="btn-pixel flex-shrink-0"
-            >
-                 {isGeneratingWorld ? (
-                 <>
-                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                   </svg>
-                   Generating...
-                 </>
-               ) : (
-                 <>
-                   <Sparkles size={16} className="mr-1"/>
-                   Generate World
-                 </>
-               )}
-            </Button>
-        </div>
+        {/* World Generation Controls (Only for initial generation) */}
+       {!generatedWorldBackground && (
+            <div className="mb-4 p-4 pixel-border bg-card text-card-foreground w-full max-w-3xl flex flex-col sm:flex-row gap-2 items-center z-20">
+                <Label htmlFor="world-description" className="flex-shrink-0 mr-2 font-semibold">World Prompt:</Label>
+                <Input
+                    id="world-description"
+                    type="text"
+                    value={initialWorldDescription}
+                    onChange={(e) => setInitialWorldDescription(e.target.value)}
+                    placeholder="e.g., magical forest, futuristic city ruins, lava cave"
+                    className="input-pixel flex-grow"
+                    disabled={isGeneratingWorld}
+                />
+                <Button
+                    onClick={handleInitialGenerate}
+                    disabled={isGeneratingWorld || !initialWorldDescription}
+                    className="btn-pixel flex-shrink-0"
+                >
+                    {isGeneratingWorld ? (
+                        <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Generating...
+                        </>
+                    ) : (
+                        <>
+                        <Sparkles size={16} className="mr-1"/>
+                        Generate World
+                        </>
+                    )}
+                </Button>
+            </div>
+       )}
 
 
       {/* Game Area */}
@@ -412,8 +481,7 @@ export default function WorldPage() {
             width: `${WORLD_WIDTH}px`,
             height: `${WORLD_HEIGHT}px`,
             imageRendering: 'pixelated',
-            // Default background in case image fails or isn't generated yet
-            backgroundColor: 'hsl(var(--background))', // Use theme background
+            backgroundColor: 'hsl(var(--background))', // Fallback background
          }}
         data-ai-hint="simple pixel game background ground grass sky"
       >
@@ -422,15 +490,15 @@ export default function WorldPage() {
               <Image
                 src={generatedWorldBackground}
                 alt="Generated World Background"
-                layout="fill" // Fill the container
-                objectFit="cover" // Cover the area, might crop
+                layout="fill"
+                objectFit="cover"
                 style={{ imageRendering: 'pixelated', zIndex: 0 }}
                 unoptimized
-                priority
+                priority // Load background first
               />
           ) : (
              <>
-                 {/* Simple Fallback Ground/Sky */}
+                 {/* Simple Fallback Ground/Sky if no background yet */}
                  <div className="absolute inset-0 bg-blue-300 z-0"></div>
                  <div
                     className="absolute bottom-0 left-0 w-full bg-yellow-800 border-t-4 border-black z-0"
@@ -439,31 +507,40 @@ export default function WorldPage() {
              </>
           )}
 
+        {/* Exit Indicator */}
+        {generatedWorldBackground && (
+             <div className="absolute right-0 top-0 bottom-0 flex items-center justify-center w-10 z-10 pointer-events-none">
+                 <div className="bg-black/50 text-white p-2 rounded-l-md animate-pulse">
+                    <ArrowRight size={24} />
+                 </div>
+             </div>
+        )}
+
 
         {/* Character */}
         {currentSpriteData?.url && (
            <div
             ref={characterRef}
-            className="absolute z-10" // Character above background
+            className="absolute z-10" // Character above background and exit indicator
             style={{
               left: `${character.x}px`,
-              bottom: `${WORLD_HEIGHT - character.y - 64}px`,
-              width: '64px',
-              height: '64px',
+              bottom: `${WORLD_HEIGHT - character.y - CHARACTER_WIDTH}px`, // Position based on bottom
+              width: `${CHARACTER_WIDTH}px`,
+              height: `${CHARACTER_WIDTH}px`,
               transform: currentSpriteData.mirror ? 'scaleX(-1)' : 'scaleX(1)',
               transformOrigin: 'center center',
-              transition: 'transform 0.05s linear',
-              willChange: 'transform, left, bottom',
+              // transition: 'transform 0.05s linear', // Smooth mirror flip
+              willChange: 'transform, left, bottom', // Optimize rendering
             }}
           >
             <Image
               src={currentSpriteData.url}
               alt={`Character ${character.state}`}
-              width={64}
-              height={64}
-              style={{ imageRendering: 'pixelated' }}
+              width={CHARACTER_WIDTH}
+              height={CHARACTER_WIDTH}
+              style={{ imageRendering: 'pixelated', objectFit: 'contain' }}
               unoptimized
-              priority
+              priority // Load character quickly
             />
           </div>
         )}
@@ -477,6 +554,19 @@ export default function WorldPage() {
             <p>↓/S: Crouch</p>
             <p>C | X: Sit/Stand</p>
          </div>
+
+         {/* Loading Indicator during transitions */}
+         {isGeneratingWorld && isTransitioningRef.current && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+                   <div className="text-white text-xl flex items-center gap-2">
+                       <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                       </svg>
+                       Loading Next Area...
+                   </div>
+              </div>
+         )}
       </div>
 
        {/* Export Button */}
