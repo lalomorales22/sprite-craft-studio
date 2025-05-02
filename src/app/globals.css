@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Add pixelated font - Moved to top */
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap');
+
 body {
   font-family: 'Pixelify Sans', system-ui, sans-serif; /* Using a pixel-style font */
 }
@@ -109,8 +112,6 @@ body {
     @apply bg-background text-foreground;
     image-rendering: pixelated; /* Ensure pixel art looks crisp */
   }
-  /* Add pixelated font */
-  @import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap');
 }
 
 /* Custom utility for pixelated borders */
