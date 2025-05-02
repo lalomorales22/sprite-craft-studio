@@ -2,7 +2,7 @@
 'use client';
 
 import React, {useState} from 'react';
-import {useRouter} from 'next/navigation'; // Import useRouter
+import {useRouter} from 'next/navigation';
 import {SidebarProvider, Sidebar, SidebarInset, SidebarTrigger, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from '@/components/ui/sidebar';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -11,14 +11,15 @@ import {Textarea} from '@/components/ui/textarea';
 import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} from '@/components/ui/card';
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
+import {removeBackground} from '@/ai/flows/remove-background'; // Import the new flow
 import Image from 'next/image';
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe} from 'lucide-react'; // Added Globe
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles} from 'lucide-react'; // Added Globe, Sparkles
 import Link from 'next/link';
-import SpriteEditor from '@/components/sprite-editor'; // Import the new SpriteEditor component
+import SpriteEditor from '@/components/sprite-editor';
 
 // Define types for sprite states
 type SpriteState = 'standing' | 'walkingLeft' | 'walkingRight' | 'running' | 'jumping' | 'crouching' | 'sitting';
-export type SpriteSlots = { // Export SpriteSlots type
+export type SpriteSlots = {
   [key in SpriteState]: string | null; // Store data URI or null
 };
 
@@ -27,6 +28,7 @@ export default function Home() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [generatedSpriteSheet, setGeneratedSpriteSheet] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false); // State for background removal loading
   const [editorImage, setEditorImage] = useState<string | null>(null); // Image sent to editor
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots>({
     standing: null,
@@ -38,7 +40,7 @@ export default function Home() {
     sitting: null,
   });
   const {toast} = useToast();
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -46,6 +48,9 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadedImage(reader.result as string);
+        // Optionally clear generated sheet if a new image is uploaded
+        // setGeneratedSpriteSheet(null);
+        // setEditorImage(null);
       };
       reader.readAsDataURL(file);
     }
@@ -62,7 +67,7 @@ export default function Home() {
     }
 
     setIsLoading(true);
-    setGeneratedSpriteSheet(null); // Clear previous generation
+    setGeneratedSpriteSheet(null);
     setEditorImage(null);
     try {
       const result = await generateSpriteSheet({
@@ -70,10 +75,11 @@ export default function Home() {
         description: description,
       });
       setGeneratedSpriteSheet(result.spriteSheetDataUri);
-      setEditorImage(result.spriteSheetDataUri); // Send generated image to editor
+      // Optionally send directly to editor after generation
+      // setEditorImage(result.spriteSheetDataUri);
       toast({
         title: 'Sprite Sheet Generated!',
-        description: 'You can now edit the sprite sheet.',
+        description: 'You can now remove the background or send it to the editor.',
       });
     } catch (error) {
       console.error('Error generating sprite sheet:', error);
@@ -82,7 +88,6 @@ export default function Home() {
         description: 'Could not generate the sprite sheet. Please try again.',
         variant: 'destructive',
       });
-      // Clear generated image on failure
       setGeneratedSpriteSheet(null);
       setEditorImage(null);
     } finally {
@@ -90,12 +95,49 @@ export default function Home() {
     }
   };
 
+  const handleRemoveBackground = async () => {
+    if (!generatedSpriteSheet) {
+       toast({
+         title: 'No Generated Image',
+         description: 'Please generate a sprite sheet first.',
+         variant: 'destructive',
+       });
+       return;
+     }
+
+     setIsRemovingBackground(true);
+     const originalSheet = generatedSpriteSheet; // Store original for editor check
+
+     try {
+       const result = await removeBackground({ photoDataUri: generatedSpriteSheet });
+       setGeneratedSpriteSheet(result.imageDataUri);
+        // If the editor was showing the *original* generated sheet, update it
+       if (editorImage === originalSheet) {
+           setEditorImage(result.imageDataUri);
+       }
+       toast({
+         title: 'Background Removed!',
+         description: 'The background has been removed from the sprite sheet.',
+       });
+     } catch (error) {
+       console.error('Error removing background:', error);
+       toast({
+         title: 'Background Removal Failed',
+         description: `Could not remove the background. ${error instanceof Error ? error.message : 'Please try again.'}`,
+         variant: 'destructive',
+       });
+       // Optionally revert? Or keep the original generated image?
+       // setGeneratedSpriteSheet(originalSheet); // Revert on failure?
+     } finally {
+       setIsRemovingBackground(false);
+     }
+  }
+
   const handleSendToEditor = () => {
     if (generatedSpriteSheet) {
       setEditorImage(generatedSpriteSheet);
-      toast({ title: "Image sent to editor" });
+      toast({ title: "Generated sheet sent to editor" });
     } else if (uploadedImage) {
-        // Allow sending uploaded image directly if no generation happened
         setEditorImage(uploadedImage);
         toast({ title: "Uploaded image sent to editor" });
     }
@@ -110,16 +152,21 @@ export default function Home() {
   };
 
   const handleEnterWorld = () => {
-    const allSlotsFilled = Object.values(spriteSlots).every(slot => slot !== null);
+     const allSlotsFilled = Object.values(spriteSlots).every(slot => slot !== null);
      if (allSlotsFilled) {
         try {
-          // Save to sessionStorage
-          sessionStorage.setItem('spriteData', JSON.stringify(spriteSlots));
-          // Navigate programmatically
+          const spriteDataString = JSON.stringify(spriteSlots);
+          sessionStorage.setItem('spriteData', spriteDataString);
+          console.log("Sprite data saved to sessionStorage:", spriteDataString.substring(0, 100) + "...");
           router.push('/world');
         } catch (error) {
            console.error("Error saving to sessionStorage or navigating:", error);
-           toast({ title: "Error", description: "Could not save character data or navigate to the world.", variant: "destructive" });
+           // Check for QuotaExceededError
+            if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+                 toast({ title: "Storage Error", description: "Could not save character data due to storage limits. Try clearing browser data.", variant: "destructive", duration: 7000 });
+            } else {
+                 toast({ title: "Error", description: "Could not save character data or navigate to the world.", variant: "destructive" });
+            }
         }
      } else {
         toast({ title: "Missing Poses", description: "Please assign all character poses before entering the world.", variant: "destructive" });
@@ -145,10 +192,28 @@ export default function Home() {
                </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-               {/* Direct Link to /world, data will be checked there */}
-               <Link href="/world" passHref>
-                 <SidebarMenuButton tooltip="Game World Preview">
-                   <Globe size={16}/> {/* Use Globe icon */}
+               <Link href="/world" passHref legacyBehavior>
+                 <SidebarMenuButton
+                    tooltip="Game World Preview"
+                    onClick={(e) => {
+                         // Prevent navigation if validation fails, show toast instead
+                         const allFilled = Object.values(spriteSlots).every(slot => slot !== null);
+                         if (!allFilled) {
+                            e.preventDefault();
+                            toast({ title: "Missing Poses", description: "Assign all poses on the Creator page first.", variant: "destructive" });
+                         } else {
+                             try {
+                                 sessionStorage.setItem('spriteData', JSON.stringify(spriteSlots));
+                                 // Allow navigation to proceed
+                             } catch (error) {
+                                  e.preventDefault(); // Prevent navigation on error
+                                  console.error("Error saving to sessionStorage before navigation:", error);
+                                  toast({ title: "Storage Error", description: "Could not save character data before entering world.", variant: "destructive" });
+                             }
+                         }
+                    }}
+                  >
+                   <Globe size={16}/>
                    <span>Game World</span>
                  </SidebarMenuButton>
                </Link>
@@ -181,13 +246,13 @@ export default function Home() {
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Character Description (for Generation)</Label>
+              <Label htmlFor="description">Character Description (for AI Generation)</Label>
               <Textarea
                 id="description"
                 placeholder="e.g., A brave knight with shiny armor, A mystical wizard with a long beard"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="input-pixel min-h-[100px]"
+                className="input-pixel min-h-[80px]" // Reduced height a bit
               />
             </div>
              {generatedSpriteSheet && (
@@ -199,21 +264,37 @@ export default function Home() {
                </div>
             )}
           </CardContent>
-          <CardFooter className="flex-col sm:flex-row gap-2">
-            <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel w-full sm:w-auto flex-1">
+          <CardFooter className="flex flex-col sm:flex-row gap-2 flex-wrap"> {/* Allow wrapping */}
+            <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel flex-grow sm:flex-grow-0"> {/* Grow on small screens */}
               {isLoading ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   Generating...
                 </>
               ) : (
-                'Generate Sprite Sheet'
+                'Generate Sheet' // Shorter text
               )}
             </Button>
-            <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary w-full sm:w-auto" disabled={!generatedSpriteSheet && !uploadedImage}>
+             <Button onClick={handleRemoveBackground} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={!generatedSpriteSheet || isRemovingBackground || isLoading}>
+              {isRemovingBackground ? (
+                 <>
+                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                   </svg>
+                   Removing BG...
+                 </>
+               ) : (
+                 <>
+                   <Sparkles size={16} className="mr-1"/> {/* Sparkles icon */}
+                   Remove BG
+                 </>
+               )}
+            </Button>
+            <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={(!generatedSpriteSheet && !uploadedImage) || isLoading || isRemovingBackground}>
                 Send to Editor
             </Button>
           </CardFooter>
@@ -262,7 +343,7 @@ export default function Home() {
                           {spriteSlots[state] ? (
                             <Image src={spriteSlots[state]!} alt={`${state} sprite`} width={64} height={64} style={{ imageRendering: 'pixelated', objectFit: 'contain' }} />
                           ) : (
-                             <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-4xl">?</div> // Placeholder square
+                             <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-4xl">?</div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-sm font-medium">
@@ -276,7 +357,6 @@ export default function Home() {
               </div>
            </CardContent>
            <CardFooter className="justify-end">
-              {/* Button uses programmatic navigation */}
               <Button
                 onClick={handleEnterWorld}
                 disabled={!allSlotsFilled}
@@ -292,5 +372,4 @@ export default function Home() {
   );
 }
 
-// Add type export for world page
 export type { SpriteState };
