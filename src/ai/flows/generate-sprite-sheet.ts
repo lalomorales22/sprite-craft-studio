@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Generates an 8-bit sprite sheet based on a user-provided image and text description.
@@ -31,33 +32,8 @@ export async function generateSpriteSheet(input: GenerateSpriteSheetInput): Prom
   return generateSpriteSheetFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'generateSpriteSheetPrompt',
-  input: {
-    schema: z.object({
-      photoDataUri: z
-        .string()
-        .describe(
-          "A photo to use as a reference for generating the sprite sheet, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-        ),
-      description: z.string().describe('A description of the character to create in the sprite sheet.'),
-    }),
-  },
-  output: {
-    schema: z.object({
-      spriteSheetDataUri: z
-        .string()
-        .describe("The generated 8-bit sprite sheet as a data URI."),
-    }),
-  },
-  prompt: `You are an expert in creating 8-bit sprite sheets for games. Based on the provided image and description, generate an 8-bit sprite sheet.
-
-Description: {{{description}}}
-Image: {{media url=photoDataUri}}
-
-Create a sprite sheet that captures the essence of the character described, ensuring it is in an 8-bit style. The output MUST be a data URI representing the sprite sheet. Focus on the 8 bit look and feel. Do not include transparency.
-`,
-});
+// Note: definePrompt is not used here because we need multimodal input (image + text)
+// directly in ai.generate with the experimental image generation model.
 
 const generateSpriteSheetFlow = ai.defineFlow<
   typeof GenerateSpriteSheetInputSchema,
@@ -69,17 +45,41 @@ const generateSpriteSheetFlow = ai.defineFlow<
     outputSchema: GenerateSpriteSheetOutputSchema,
   },
   async input => {
-    const {media} = await ai.generate({
-      model: 'googleai/gemini-2.0-flash-exp',
-      prompt: [
-        {media: {url: input.photoDataUri}},
-        {text: `Create an 8-bit sprite sheet based on this character. ${input.description}`},
-      ],
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-      },
-    });
+     console.log("Starting sprite sheet generation flow.");
+     console.log("Input description:", input.description);
+     console.log("Input photoDataUri (start):", input.photoDataUri.substring(0, 50) + "...");
 
-    return {spriteSheetDataUri: media.url!};
+     try {
+        const {media} = await ai.generate({
+          // IMPORTANT: ONLY the googleai/gemini-2.0-flash-exp model is able to generate images.
+          model: 'googleai/gemini-2.0-flash-exp',
+          prompt: [
+            {media: {url: input.photoDataUri}},
+            {text: `Create an 8-bit sprite sheet based on this character. ${input.description}. The output MUST be an image containing multiple poses or frames suitable for a game sprite sheet. Use an 8-bit pixel art style. Do not include transparency unless absolutely necessary for the character's design.`},
+          ],
+          config: {
+            responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE
+          },
+        });
+
+         if (!media || !media.url) {
+             console.error("Sprite sheet generation flow: No media returned from AI generate.");
+             throw new Error('Sprite sheet generation failed: No image returned from the model.');
+         }
+
+         console.log("Sprite sheet generation successful. Result URI:", media.url.substring(0, 50) + "...");
+        return {spriteSheetDataUri: media.url};
+
+     } catch (error) {
+         console.error("Error during sprite sheet generation flow:", error);
+
+         // Check if it's a known GenkitError related to safety settings
+         if (error instanceof Error && error.message.includes('Generation blocked')) {
+            throw new Error('Generation failed due to safety settings. Please try a different image or description.');
+         }
+
+         // Re-throw other errors
+         throw new Error(`Sprite sheet generation failed: ${error instanceof Error ? error.message : String(error)}`);
+     }
   }
 );

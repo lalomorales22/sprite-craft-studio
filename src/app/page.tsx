@@ -85,8 +85,9 @@ export default function Home() {
       console.error('Error generating sprite sheet:', error);
       toast({
         title: 'Generation Failed',
-        description: 'Could not generate the sprite sheet. Please try again.',
+        description: `${error instanceof Error ? error.message : 'Could not generate the sprite sheet. Please try again.'}`, // Display specific error
         variant: 'destructive',
+        duration: 7000 // Show longer for safety errors
       });
       setGeneratedSpriteSheet(null);
       setEditorImage(null);
@@ -208,7 +209,11 @@ export default function Home() {
                              } catch (error) {
                                   e.preventDefault(); // Prevent navigation on error
                                   console.error("Error saving to sessionStorage before navigation:", error);
-                                  toast({ title: "Storage Error", description: "Could not save character data before entering world.", variant: "destructive" });
+                                   if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+                                         toast({ title: "Storage Error", description: "Could not save character data before entering world due to storage limits.", variant: "destructive", duration: 7000 });
+                                    } else {
+                                         toast({ title: "Storage Error", description: "Could not save character data before entering world.", variant: "destructive" });
+                                    }
                              }
                          }
                     }}
