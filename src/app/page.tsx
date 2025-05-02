@@ -11,11 +11,12 @@ import {Textarea} from '@/components/ui/textarea';
 import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} from '@/components/ui/card';
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
-import {removeBackground} from '@/ai/flows/remove-background'; // Import the new flow
+import {removeBackground} from '@/ai/flows/remove-background'; // Import the background removal flow
 import Image from 'next/image';
 import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles} from 'lucide-react'; // Added Globe, Sparkles
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading states
 
 // Define types for sprite states
 type SpriteState = 'standing' | 'walkingLeft' | 'walkingRight' | 'running' | 'jumping' | 'crouching' | 'sitting';
@@ -28,7 +29,7 @@ export default function Home() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [generatedSpriteSheet, setGeneratedSpriteSheet] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRemovingBackground, setIsRemovingBackground] = useState(false); // State for background removal loading
+  const [isRemovingEditorBackground, setIsRemovingEditorBackground] = useState(false); // State for editor background removal loading
   const [editorImage, setEditorImage] = useState<string | null>(null); // Image sent to editor
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots>({
     standing: null,
@@ -48,7 +49,7 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadedImage(reader.result as string);
-        // Optionally clear generated sheet if a new image is uploaded
+        // Optionally clear other states if a new image is uploaded
         // setGeneratedSpriteSheet(null);
         // setEditorImage(null);
       };
@@ -67,28 +68,37 @@ export default function Home() {
     }
 
     setIsLoading(true);
-    setGeneratedSpriteSheet(null);
-    setEditorImage(null);
+    setGeneratedSpriteSheet(null); // Clear previous generation
+    setEditorImage(null); // Clear editor if generating new
     try {
       const result = await generateSpriteSheet({
         photoDataUri: uploadedImage,
         description: description,
       });
       setGeneratedSpriteSheet(result.spriteSheetDataUri);
-      // Optionally send directly to editor after generation
-      // setEditorImage(result.spriteSheetDataUri);
       toast({
         title: 'Sprite Sheet Generated!',
-        description: 'You can now remove the background or send it to the editor.',
+        description: 'You can now send it to the editor.',
       });
     } catch (error) {
       console.error('Error generating sprite sheet:', error);
-      toast({
-        title: 'Generation Failed',
-        description: `${error instanceof Error ? error.message : 'Could not generate the sprite sheet. Please try again.'}`, // Display specific error
-        variant: 'destructive',
-        duration: 7000 // Show longer for safety errors
-      });
+      // Specific check for safety settings error from the flow
+      const errorMessage = error instanceof Error ? error.message : 'Could not generate the sprite sheet. Please try again.';
+       if (errorMessage.includes('Generation failed due to safety settings')) {
+          toast({
+            title: 'Generation Blocked',
+            description: 'The image or description triggered safety filters. Please modify and try again.',
+            variant: 'destructive',
+            duration: 7000 // Show longer for safety errors
+          });
+       } else {
+         toast({
+            title: 'Generation Failed',
+            description: errorMessage,
+            variant: 'destructive',
+            duration: 7000 // Show longer for other errors too
+         });
+       }
       setGeneratedSpriteSheet(null);
       setEditorImage(null);
     } finally {
@@ -96,43 +106,48 @@ export default function Home() {
     }
   };
 
-  const handleRemoveBackground = async () => {
-    if (!generatedSpriteSheet) {
+
+   const handleRemoveEditorBackground = async () => {
+     if (!editorImage) {
        toast({
-         title: 'No Generated Image',
-         description: 'Please generate a sprite sheet first.',
+         title: 'No Image in Editor',
+         description: 'Please send an image to the editor first.',
          variant: 'destructive',
        });
        return;
      }
 
-     setIsRemovingBackground(true);
-     const originalSheet = generatedSpriteSheet; // Store original for editor check
+     setIsRemovingEditorBackground(true);
+     const originalEditorImage = editorImage; // Store original for potential comparison
 
      try {
-       const result = await removeBackground({ photoDataUri: generatedSpriteSheet });
-       setGeneratedSpriteSheet(result.imageDataUri);
-        // If the editor was showing the *original* generated sheet, update it
-       if (editorImage === originalSheet) {
-           setEditorImage(result.imageDataUri);
+       const result = await removeBackground({ photoDataUri: editorImage });
+       setEditorImage(result.imageDataUri); // Update the editor image
+
+        // If the original generated sheet was the one in the editor, update it too
+       if (generatedSpriteSheet === originalEditorImage) {
+           setGeneratedSpriteSheet(result.imageDataUri);
        }
+
        toast({
          title: 'Background Removed!',
-         description: 'The background has been removed from the sprite sheet.',
+         description: 'The background has been removed from the image in the editor.',
        });
      } catch (error) {
-       console.error('Error removing background:', error);
+       console.error('Error removing background from editor image:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Could not remove the background. Please try again.';
        toast({
          title: 'Background Removal Failed',
-         description: `Could not remove the background. ${error instanceof Error ? error.message : 'Please try again.'}`,
+         description: errorMessage,
          variant: 'destructive',
+          duration: 7000
        });
-       // Optionally revert? Or keep the original generated image?
-       // setGeneratedSpriteSheet(originalSheet); // Revert on failure?
+       // Optionally revert? No, keep the current editor image on failure.
      } finally {
-       setIsRemovingBackground(false);
+       setIsRemovingEditorBackground(false);
      }
-  }
+   };
+
 
   const handleSendToEditor = () => {
     if (generatedSpriteSheet) {
@@ -268,6 +283,12 @@ export default function Home() {
                   </div>
                </div>
             )}
+             {isLoading && (
+                <div className="space-y-2">
+                    <Label>Generating Sprite Sheet...</Label>
+                    <Skeleton className="w-[256px] h-[256px] bg-muted" />
+                </div>
+             )}
           </CardContent>
           <CardFooter className="flex flex-col sm:flex-row gap-2 flex-wrap"> {/* Allow wrapping */}
             <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel flex-grow sm:flex-grow-0"> {/* Grow on small screens */}
@@ -283,23 +304,7 @@ export default function Home() {
                 'Generate Sheet' // Shorter text
               )}
             </Button>
-             <Button onClick={handleRemoveBackground} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={!generatedSpriteSheet || isRemovingBackground || isLoading}>
-              {isRemovingBackground ? (
-                 <>
-                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                   </svg>
-                   Removing BG...
-                 </>
-               ) : (
-                 <>
-                   <Sparkles size={16} className="mr-1"/> {/* Sparkles icon */}
-                   Remove BG
-                 </>
-               )}
-            </Button>
-            <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={(!generatedSpriteSheet && !uploadedImage) || isLoading || isRemovingBackground}>
+            <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={(!generatedSpriteSheet && !uploadedImage) || isLoading}>
                 Send to Editor
             </Button>
           </CardFooter>
@@ -308,17 +313,44 @@ export default function Home() {
          {/* Right Side: Editor and Assembly */}
         <Card className="flex-1 card-pixel flex flex-col">
            <CardHeader>
-             <CardTitle className="flex items-center gap-2"><Paintbrush /> 2. Edit &amp; Assign Poses</CardTitle>
+             <div className="flex justify-between items-center">
+                 <CardTitle className="flex items-center gap-2"><Paintbrush /> 2. Edit &amp; Assign Poses</CardTitle>
+                 <Button onClick={handleRemoveEditorBackground} variant="secondary" className="btn-pixel-secondary h-8 px-3 text-xs" disabled={!editorImage || isRemovingEditorBackground || isLoading}>
+                     {isRemovingEditorBackground ? (
+                         <>
+                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                         </svg>
+                         Removing BG...
+                         </>
+                     ) : (
+                         <>
+                         <Sparkles size={14} className="mr-1"/>
+                         Remove BG
+                         </>
+                     )}
+                 </Button>
+             </div>
              <CardDescription>Select parts of your sheet and save them for each character pose.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
               {/* Editor Canvas Area */}
               <div className="flex-grow relative pixel-border bg-white min-h-[300px] md:min-h-0">
+                 {isRemovingEditorBackground && (
+                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10">
+                      <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                       </svg>
+                   </div>
+                 )}
                 {editorImage ? (
                   <SpriteEditor
                      imageUrl={editorImage}
                      onSaveSprite={handleSaveSprite}
                      spriteSlots={spriteSlots}
+                     key={editorImage} // Force re-render when image changes (e.g., after BG removal)
                   />
                  ) : (
                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground p-4 text-center">
@@ -364,7 +396,7 @@ export default function Home() {
            <CardFooter className="justify-end">
               <Button
                 onClick={handleEnterWorld}
-                disabled={!allSlotsFilled}
+                disabled={!allSlotsFilled || isLoading || isRemovingEditorBackground}
                 className="btn-pixel-accent"
                 aria-disabled={!allSlotsFilled}
               >

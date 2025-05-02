@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input'; // Import Input
-import { Eraser, Paintbrush, ZoomIn, ZoomOut, RotateCcw, Save, MousePointer, Slice } from 'lucide-react'; // Added Slice for Select
+import { Eraser, Paintbrush, ZoomIn, ZoomOut, RotateCcw, Save, MousePointer, Slice, CircleHelp } from 'lucide-react'; // Added Slice, CircleHelp
 import {
   Select,
   SelectContent,
@@ -20,8 +20,21 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"; // Import Tooltip components
+} from "@/components/ui/tooltip";
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   AlertDialogTrigger,
+ } from "@/components/ui/alert-dialog" // Import Alert Dialog
 import type { SpriteState, SpriteSlots } from '@/app/page'; // Import types
+
+type Tool = 'select' | 'erase' | 'draw' | 'pan';
 
 interface SpriteEditorProps {
   imageUrl: string;
@@ -40,52 +53,33 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
   const [selection, setSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [startSelect, setStartSelect] = useState({ x: 0, y: 0 });
-  const [tool, setTool] = useState<'select' | 'erase' | 'draw' | 'pan'>('pan'); // Added 'pan', default to 'pan'
+  const [tool, setTool] = useState<Tool>('pan');
   const [brushSize, setBrushSize] = useState(5);
-  const [drawColor, setDrawColor] = useState('#000000'); // Default draw color
+  const [drawColor, setDrawColor] = useState('#000000');
   const [isDrawing, setIsDrawing] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [selectedSpriteState, setSelectedSpriteState] = useState<SpriteState>('standing');
 
 
+  // --- Drawing Logic ---
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d', { willReadFrequently: true }); // Opt-in for performance
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
     const img = imageRef.current;
 
     if (!canvas || !ctx ) return;
+    ctx.imageSmoothingEnabled = false; // Ensure crisp pixels
 
-     // Ensure crisp pixels
-    ctx.imageSmoothingEnabled = false;
-    ctx.webkitImageSmoothingEnabled = false; // for Safari
-    // @ts-ignore moz specific property
-    ctx.mozImageSmoothingEnabled = false;    // for Firefox
-    // @ts-ignore ms specific property
-    ctx.msImageSmoothingEnabled = false;     // for IE
-
-    // Clear canvas
+    // Clear canvas & draw checkered background
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-     // Optionally draw checkered background for transparency visualization
-    const patternSize = 10;
-    ctx.fillStyle = '#ccc'; // Light gray
+    const patternSize = 10; // Checkered pattern size
     for (let i = 0; i < canvas.width; i += patternSize) {
         for (let j = 0; j < canvas.height; j += patternSize) {
-            if ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) {
-                ctx.fillRect(i, j, patternSize, patternSize);
-            }
+            ctx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+            ctx.fillRect(i, j, patternSize, patternSize);
         }
     }
-    ctx.fillStyle = '#fff'; // White
-     for (let i = 0; i < canvas.width; i += patternSize) {
-        for (let j = 0; j < canvas.height; j += patternSize) {
-            if ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 !== 0) {
-                ctx.fillRect(i, j, patternSize, patternSize);
-            }
-        }
-    }
-
 
     // Apply zoom and pan
     ctx.save();
@@ -94,87 +88,120 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
 
     // Draw the current state from history
      if (history[historyIndex]) {
-        // Create a temporary canvas to draw the ImageData
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = history[historyIndex].width;
         tempCanvas.height = history[historyIndex].height;
         const tempCtx = tempCanvas.getContext('2d');
         if (tempCtx) {
             tempCtx.putImageData(history[historyIndex], 0, 0);
-            // Now draw the temp canvas onto the main canvas
             ctx.drawImage(tempCanvas, 0, 0);
         }
-     }
-     // Fallback: Draw original image if history is somehow empty (shouldn't happen after load)
-     else if (img) {
+     } else if (img) { // Fallback: Draw original image if history is empty
          ctx.drawImage(img, 0, 0);
      }
 
-
-     // Draw selection rectangle if it exists
-    if (selection && tool === 'select') { // Only show selection for select tool
-      ctx.strokeStyle = 'rgba(255, 105, 180, 0.9)'; // Accent Pink with more opacity
-      ctx.lineWidth = 2 / zoom; // Adjust line width based on zoom
-      ctx.setLineDash([4 / zoom, 2 / zoom]); // Dashed line for selection
+     // Draw selection rectangle
+    if (selection && tool === 'select') {
+      ctx.strokeStyle = 'rgba(255, 105, 180, 0.9)'; // Accent Pink
+      ctx.lineWidth = 2 / zoom;
+      ctx.setLineDash([4 / zoom, 2 / zoom]);
       ctx.strokeRect(selection.x, selection.y, selection.width, selection.height);
-      ctx.setLineDash([]); // Reset line dash
+      ctx.setLineDash([]);
     }
 
     ctx.restore();
   }, [zoom, offset, selection, history, historyIndex, tool]);
 
-
+  // --- History Management ---
   const saveToHistory = useCallback(() => {
      const canvas = canvasRef.current;
-     const img = imageRef.current; // Need the original image dimensions
+     const img = imageRef.current;
      if (!canvas || !img) return;
 
-     // Get context of the *original size* canvas in memory used for history
+     // Need to capture the *current visual state* but at *original image resolution*
+     // Create a temporary canvas with original image dimensions
      const tempCanvas = document.createElement('canvas');
      tempCanvas.width = img.width;
      tempCanvas.height = img.height;
      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
      if (!tempCtx) return;
 
-      // Draw the *current visual state* (zoomed/panned) from the display canvas
-      // onto the temp canvas *at original scale*
-      tempCtx.imageSmoothingEnabled = false;
-      tempCtx.drawImage(canvas, 0, 0); // This might need adjustment if canvas itself isn't original size
+     tempCtx.imageSmoothingEnabled = false;
 
+      // Draw the checkered background first (on the temp canvas)
+     const patternSize = 10;
+     for (let i = 0; i < tempCanvas.width; i += patternSize) {
+        for (let j = 0; j < tempCanvas.height; j += patternSize) {
+            tempCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+            tempCtx.fillRect(i, j, patternSize, patternSize);
+        }
+     }
 
-      // Get ImageData from the correctly scaled temporary canvas
-      try {
-        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-         const newHistory = history.slice(0, historyIndex + 1);
-         newHistory.push(imageData);
-         setHistory(newHistory);
-         setHistoryIndex(newHistory.length - 1);
-      } catch (e) {
-          console.error("Error getting ImageData for history:", e);
+      // Draw the current image data (from the last history state) onto the temp canvas
+      if (history[historyIndex]) {
+         const historyCanvas = document.createElement('canvas');
+         historyCanvas.width = history[historyIndex].width;
+         historyCanvas.height = history[historyIndex].height;
+         historyCanvas.getContext('2d')?.putImageData(history[historyIndex], 0, 0);
+         tempCtx.drawImage(historyCanvas, 0, 0);
       }
 
 
-  }, [history, historyIndex, canvasRef, imageRef]);
+     // Get ImageData from the correctly scaled temporary canvas
+      try {
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+         const newHistory = history.slice(0, historyIndex + 1);
+         // Avoid saving identical states
+         if (historyIndex >= 0) {
+             const lastData = history[historyIndex].data;
+             const currentData = imageData.data;
+             let same = true;
+             for (let i = 0; i < lastData.length; i++) {
+                 if (lastData[i] !== currentData[i]) {
+                     same = false;
+                     break;
+                 }
+             }
+             if (same) {
+                 console.log("Skipping save to history: state unchanged.");
+                 return; // Don't save if identical to previous state
+             }
+         }
 
+         newHistory.push(imageData);
+         setHistory(newHistory);
+         setHistoryIndex(newHistory.length - 1);
+         console.log("Saved to history. Index:", newHistory.length - 1);
+      } catch (e) {
+          console.error("Error getting ImageData for history:", e);
+      }
+  }, [history, historyIndex]);
 
-  // Load image and initialize canvas
+  const handleUndo = useCallback(() => {
+      if (historyIndex > 0) {
+         const newIndex = historyIndex - 1;
+         setHistoryIndex(newIndex);
+         console.log("Undo. History index:", newIndex);
+         // Draw is handled by useEffect dependency on historyIndex
+      } else {
+          console.log("Cannot undo further.");
+      }
+   }, [historyIndex]);
+
+  // --- Image Loading & Initialization ---
   useEffect(() => {
     console.log("Image URL Changed:", imageUrl);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     const img = new window.Image();
-    img.crossOrigin = "anonymous";
+    img.crossOrigin = "anonymous"; // Allow loading cross-origin images for canvas manipulation
 
     img.onload = () => {
        console.log("Image Loaded:", img.width, img.height);
       if (!canvas || !ctx) return;
       imageRef.current = img;
 
-      // Set canvas display size (CSS)
-      // canvas.style.width = `${img.width}px`;
-      // canvas.style.height = `${img.height}px`;
-
-      // Set canvas actual drawing surface size
+      // Set canvas actual drawing surface size to match image
       canvas.width = img.width;
       canvas.height = img.height;
 
@@ -182,167 +209,124 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
       setZoom(1);
       setSelection(null);
       setIsSelecting(false);
-      setTool('pan'); // Reset tool to pan
+      setTool('pan');
+      setHistory([]); // Clear history for new image
+      setHistoryIndex(-1);
 
-
-      // Calculate initial offset to center the image
-       const initialZoom = 1; // Start at 1x zoom
-       const initialOffsetX = (canvas.offsetWidth - img.width * initialZoom) / 2;
-       const initialOffsetY = (canvas.offsetHeight - img.height * initialZoom) / 2;
-       setOffset({ x: initialOffsetX, y: initialOffsetY });
-       setZoom(initialZoom); // Explicitly set zoom
-
-
-       // Draw the initial image onto the canvas
-        ctx.imageSmoothingEnabled = false;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        console.log("Initial draw complete");
-
-      // Save initial state to history
-       try {
-           const initialImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-           setHistory([initialImageData]);
-           setHistoryIndex(0);
-           console.log("Initial history saved");
-       } catch (e) {
-            console.error("Error getting initial ImageData:", e);
-            setHistory([]);
-            setHistoryIndex(-1);
+      // Center the image initially
+       const container = canvas.parentElement; // Get the container div
+       if (container) {
+           const containerWidth = container.offsetWidth;
+           const containerHeight = container.offsetHeight;
+           const initialZoom = Math.min(1, containerWidth / img.width, containerHeight / img.height); // Fit image within container initially, max 1x zoom
+           const initialOffsetX = (containerWidth - img.width * initialZoom) / 2;
+           const initialOffsetY = (containerHeight - img.height * initialZoom) / 2;
+           setOffset({ x: initialOffsetX, y: initialOffsetY });
+           setZoom(initialZoom);
+           console.log("Initial zoom:", initialZoom, "Offset:", initialOffsetX, initialOffsetY);
+       } else {
+            setOffset({ x: 0, y: 0 }); // Fallback if no container
+            setZoom(1);
        }
-       // Trigger redraw explicitly after state updates
-       // requestAnimationFrame(() => draw()); // Use rAF for smoother updates
+
+       // Draw initial image onto a temporary canvas to get ImageData for history
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        if (tempCtx) {
+            tempCtx.imageSmoothingEnabled = false;
+            tempCtx.drawImage(img, 0, 0);
+             try {
+                 const initialImageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+                 setHistory([initialImageData]);
+                 setHistoryIndex(0);
+                 console.log("Initial history saved from loaded image.");
+             } catch (e) {
+                  console.error("Error getting initial ImageData:", e);
+                  // Handle CORS or other errors
+             }
+        }
     };
     img.onerror = (e) => {
       console.error("Error loading image:", e);
-      // Clear canvas and history on error
-       if (canvas && ctx) {
-           ctx.clearRect(0, 0, canvas.width, canvas.height);
-       }
-       imageRef.current = null;
-       setHistory([]);
-       setHistoryIndex(-1);
-       setSelection(null);
+      if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      imageRef.current = null; setHistory([]); setHistoryIndex(-1); setSelection(null);
     }
     img.src = imageUrl;
 
+    return () => { imageRef.current = null; }; // Cleanup
+  }, [imageUrl]);
 
-     // Cleanup function
-    return () => {
-      console.log("Cleaning up SpriteEditor effect");
-      imageRef.current = null; // Clean up image ref
-    };
-
-  }, [imageUrl]); // Rerun ONLY when imageUrl changes
-
-    // Separate effect for drawing whenever relevant state changes
+    // Redraw whenever relevant state changes
     useEffect(() => {
         requestAnimationFrame(() => draw());
-    }, [draw, zoom, offset, selection, historyIndex]); // Depend on draw and its dependencies
+    }, [draw, zoom, offset, selection, historyIndex, tool]); // Added tool
 
 
-   // Update preview canvas when selection changes
+   // Update preview canvas
   useEffect(() => {
-    const canvas = canvasRef.current;
     const previewCanvas = previewCanvasRef.current;
     const previewCtx = previewCanvas?.getContext('2d', { willReadFrequently: true });
 
-    if (!canvas || !previewCanvas || !previewCtx || !selection || !imageRef.current) {
-        // Clear preview if no selection or image
-        if(previewCanvas && previewCtx) {
-            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-        }
+    if (!previewCanvas || !previewCtx || !selection || !imageRef.current || selection.width < 1 || selection.height < 1) {
+        if(previewCanvas && previewCtx) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         return;
     }
-
-     // Ensure crisp pixels
     previewCtx.imageSmoothingEnabled = false;
-    previewCtx.webkitImageSmoothingEnabled = false;
-    // @ts-ignore
-    previewCtx.mozImageSmoothingEnabled = false;
-    // @ts-ignore
-    previewCtx.msImageSmoothingEnabled = false;
 
-
-    // Get selection dimensions relative to the original image (not zoomed/panned)
      const imgWidth = imageRef.current.width;
      const imgHeight = imageRef.current.height;
-
-     // Calculate selection bounds in the original image coordinate space
-     const originalX = (selection.x);
-     const originalY = (selection.y);
-     const originalW = (selection.width);
-     const originalH = (selection.height);
-
-     // Clamp coordinates and dimensions to the original image bounds
-     const clampedX = Math.max(0, Math.floor(originalX));
-     const clampedY = Math.max(0, Math.floor(originalY));
-     const clampedW = Math.min(imgWidth - clampedX, Math.max(1, Math.floor(originalW)));
-     const clampedH = Math.min(imgHeight - clampedY, Math.max(1, Math.floor(originalH)));
-
+     const clampedX = Math.max(0, Math.floor(selection.x));
+     const clampedY = Math.max(0, Math.floor(selection.y));
+     const clampedW = Math.min(imgWidth - clampedX, Math.max(1, Math.floor(selection.width)));
+     const clampedH = Math.min(imgHeight - clampedY, Math.max(1, Math.floor(selection.height)));
 
      if (clampedW > 0 && clampedH > 0 && historyIndex >= 0 && history[historyIndex]) {
-         // Use the current state from history
          const sourceImageData = history[historyIndex];
-
-         // Create a temporary canvas to hold the full current state
          const tempCanvas = document.createElement('canvas');
-         tempCanvas.width = sourceImageData.width;
-         tempCanvas.height = sourceImageData.height;
+         tempCanvas.width = sourceImageData.width; tempCanvas.height = sourceImageData.height;
          const tempCtx = tempCanvas.getContext('2d');
-
          if (tempCtx) {
              tempCtx.putImageData(sourceImageData, 0, 0);
-
-             // Clear preview canvas and set its size
-             previewCanvas.width = clampedW;
-             previewCanvas.height = clampedH;
+             previewCanvas.width = clampedW; previewCanvas.height = clampedH;
              previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-             // Draw the selected portion from the temp canvas to the preview canvas
-             previewCtx.drawImage(
-                 tempCanvas,
-                 clampedX, clampedY, clampedW, clampedH, // Source rect (from original image coords)
-                 0, 0, clampedW, clampedH              // Destination rect (in preview canvas)
-             );
-         } else {
-             // Clear preview if context fails
-             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-         }
-     } else {
-         // Clear preview if selection is invalid or history is not ready
-         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-     }
+             // Draw checkered background for preview transparency
+             const patternSize = 5;
+             for (let i = 0; i < previewCanvas.width; i += patternSize) {
+                 for (let j = 0; j < previewCanvas.height; j += patternSize) {
+                     previewCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+                     previewCtx.fillRect(i, j, patternSize, patternSize);
+                 }
+             }
+
+             // Draw selected portion onto preview
+             previewCtx.drawImage( tempCanvas, clampedX, clampedY, clampedW, clampedH, 0, 0, clampedW, clampedH );
+         } else { previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); }
+     } else { previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); }
+  }, [selection, history, historyIndex]); // Removed zoom, offset as they don't affect preview content
 
 
-  }, [selection, history, historyIndex, zoom, offset]);
-
-
+  // --- Mouse Event Handling ---
   const getCanvasCoordinates = (clientX: number, clientY: number): { x: number; y: number } => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    // Calculate coordinates relative to the un-zoomed, un-panned image
     const canvasX = (clientX - rect.left - offset.x) / zoom;
     const canvasY = (clientY - rect.top - offset.y) / zoom;
     return { x: canvasX, y: canvasY };
   };
 
-
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
      const coords = getCanvasCoordinates(e.clientX, e.clientY);
-
      if (tool === 'select') {
-       setIsSelecting(true);
-       setStartSelect(coords);
-       setSelection({ x: coords.x, y: coords.y, width: 0, height: 0}); // Start selection rect
+       setIsSelecting(true); setStartSelect(coords);
+       setSelection({ x: coords.x, y: coords.y, width: 0, height: 0});
      } else if (tool === 'erase' || tool === 'draw') {
-        setIsDrawing(true);
-        // Start drawing/erasing immediately
-        applyTool(coords.x, coords.y); // Pass original image coords
+        setIsDrawing(true); applyTool(coords.x, coords.y);
      } else if (tool === 'pan') {
-       setIsDragging(true);
-       setStartDrag({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+       setIsDragging(true); setStartDrag({ x: e.clientX - offset.x, y: e.clientY - offset.y });
      }
   };
 
@@ -352,151 +336,158 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
     if (!img) return;
 
     if (isSelecting && tool === 'select') {
-       const currentX = Math.max(0, Math.min(coords.x, img.width)); // Clamp to image bounds
-       const currentY = Math.max(0, Math.min(coords.y, img.height)); // Clamp to image bounds
-       const width = currentX - startSelect.x;
-       const height = currentY - startSelect.y;
-       setSelection({
-         x: width > 0 ? startSelect.x : currentX,
-         y: height > 0 ? startSelect.y : currentY,
-         width: Math.abs(width),
-         height: Math.abs(height),
-       });
-       // No draw() needed here, useEffect handles it
+       const currentX = Math.max(0, Math.min(coords.x, img.width));
+       const currentY = Math.max(0, Math.min(coords.y, img.height));
+       const width = currentX - startSelect.x; const height = currentY - startSelect.y;
+       setSelection({ x: width > 0 ? startSelect.x : currentX, y: height > 0 ? startSelect.y : currentY,
+         width: Math.abs(width), height: Math.abs(height), });
     } else if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-       applyTool(coords.x, coords.y); // Pass original image coords
+       applyTool(coords.x, coords.y);
     } else if (isDragging && tool === 'pan') {
-      setOffset({
-        x: e.clientX - startDrag.x,
-        y: e.clientY - startDrag.y,
-      });
-      // No draw() needed here, useEffect handles it
+      setOffset({ x: e.clientX - startDrag.x, y: e.clientY - startDrag.y });
     }
   };
 
   const handleMouseUp = () => {
     if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-        saveToHistory(); // Save state after finishing a draw/erase stroke
+        saveToHistory();
     }
-    // Finalize selection
      if (isSelecting && tool === 'select' && selection && (selection.width < 1 || selection.height < 1)) {
-        setSelection(null); // Discard tiny selections
+        setSelection(null);
      }
-    setIsSelecting(false);
-    setIsDrawing(false);
-    setIsDragging(false);
+    setIsSelecting(false); setIsDrawing(false); setIsDragging(false);
   };
 
    const handleMouseLeave = () => {
-    // Only save history if actively drawing when leaving canvas
-    if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-        saveToHistory();
-    }
-     if (isSelecting) {
-        // If selecting and mouse leaves, finalize selection if valid
-         if (selection && (selection.width < 1 || selection.height < 1)) {
-            setSelection(null);
-         }
-        setIsSelecting(false);
-     }
-     setIsDrawing(false);
-     setIsDragging(false); // Stop dragging if mouse leaves canvas
+    if (isDrawing && (tool === 'erase' || tool === 'draw')) saveToHistory();
+     if (isSelecting && selection && (selection.width < 1 || selection.height < 1)) setSelection(null);
+     setIsSelecting(false); setIsDrawing(false); setIsDragging(false);
    };
 
+   // --- Wheel Event for Zoom ---
+    const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        // Mouse position relative to canvas top-left
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Coordinates relative to the image, before zoom
+        const imageX = (mouseX - offset.x) / zoom;
+        const imageY = (mouseY - offset.y) / zoom;
+
+        // Determine zoom direction and factor
+        const delta = e.deltaY > 0 ? 1 / 1.1 : 1.1; // Zoom out / Zoom in factor
+        const newZoom = Math.max(0.1, Math.min(zoom * delta, 32)); // Clamp zoom level
+
+        // Calculate new offset to keep the point under the mouse stationary
+        const newOffsetX = mouseX - imageX * newZoom;
+        const newOffsetY = mouseY - imageY * newZoom;
+
+        setZoom(newZoom);
+        setOffset({ x: newOffsetX, y: newOffsetY });
+    };
+
+    // --- Keyboard Shortcuts ---
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+             // Ignore if typing in an input field
+             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+                return;
+             }
+
+             // Tool selection
+             if (e.key.toLowerCase() === 'p') { setTool('pan'); e.preventDefault(); }
+             else if (e.key.toLowerCase() === 's') { setTool('select'); e.preventDefault(); }
+             else if (e.key.toLowerCase() === 'b') { setTool('draw'); e.preventDefault(); }
+             else if (e.key.toLowerCase() === 'e') { setTool('erase'); e.preventDefault(); }
+             // Zoom
+             else if (e.key === '+' || e.key === '=') { handleZoomIn(); e.preventDefault(); }
+             else if (e.key === '-' || e.key === '_') { handleZoomOut(); e.preventDefault(); }
+             // Undo
+             else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                 handleUndo();
+                 e.preventDefault();
+             }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleUndo]); // Add handleUndo dependency
+
+
+   // --- Tool Application Logic ---
    const applyTool = (imgX: number, imgY: number) => {
       const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
+      const ctx = canvas?.getContext('2d'); // For immediate visual feedback
       const img = imageRef.current;
       if (!canvas || !ctx || !img || historyIndex < 0) return;
 
-      // Get the current state ImageData from history
+      // Use a temporary canvas representing the *current history state* at original resolution
       const currentStateData = history[historyIndex];
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = currentStateData.width;
       tempCanvas.height = currentStateData.height;
-      const tempCtx = tempCanvas.getContext('2d');
+      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true }); // Need willReadFrequently to get data back
       if (!tempCtx) return;
       tempCtx.putImageData(currentStateData, 0, 0);
 
-      // Apply the tool operation on the temporary canvas (original image coordinates)
-      tempCtx.beginPath();
-      // Adjust for brush size centering
-      const correctedX = Math.floor(imgX - brushSize / 2);
-      const correctedY = Math.floor(imgY - brushSize / 2);
-      const size = Math.max(1, Math.floor(brushSize)); // Ensure size is at least 1
+      // Apply the tool operation on the temporary canvas
+      const correctedX = Math.floor(imgX); // Use floor for pixel alignment
+      const correctedY = Math.floor(imgY);
+      const size = Math.max(1, Math.floor(brushSize));
 
        if (tool === 'erase') {
-           tempCtx.clearRect(correctedX, correctedY, size, size);
+           // Simple rectangular erase
+           tempCtx.clearRect(correctedX - Math.floor(size / 2), correctedY - Math.floor(size / 2), size, size);
        } else if (tool === 'draw') {
            tempCtx.fillStyle = drawColor;
-           tempCtx.fillRect(correctedX, correctedY, size, size);
+           // Simple rectangular draw
+           tempCtx.fillRect(correctedX - Math.floor(size / 2), correctedY - Math.floor(size / 2), size, size);
        }
 
       // Get the modified ImageData from the temporary canvas
       try {
          const modifiedImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
 
-         // Update the main canvas immediately (this modification won't be saved to history until mouseUp)
-         ctx.save();
-         ctx.imageSmoothingEnabled = false;
-         ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear display canvas
-         ctx.putImageData(modifiedImageData, 0, 0); // Put modified data directly (at 0,0)
-         ctx.restore();
+         // --- IMPORTANT: Update the LATEST history entry directly for immediate feedback ---
+         // This allows continuous drawing without saving every tiny step to history yet
+         const currentHistory = [...history];
+         currentHistory[historyIndex] = modifiedImageData;
+         setHistory(currentHistory); // Update state to trigger redraw via useEffect
 
-          // Trigger a redraw to apply zoom/pan correctly to the modified canvas data
-          requestAnimationFrame(() => draw());
+         // Don't call saveToHistory() here, only on mouseUp/mouseLeave
 
-      } catch(e) {
-        console.error("Error applying tool:", e)
-      }
-
-   };
-
-    const handleUndo = () => {
-      if (historyIndex > 0) {
-         const newIndex = historyIndex - 1;
-         setHistoryIndex(newIndex);
-         // Restore is handled by the draw function via useEffect dependency on historyIndex
-      }
+      } catch(e) { console.error("Error applying tool:", e); }
    };
 
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 16)); // Max zoom 16x
-  const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.25)); // Min zoom 0.25x
+   // --- Zoom & Save ---
+    const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 32));
+    const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.1));
 
-  const handleSaveSelection = () => {
-    const previewCanvas = previewCanvasRef.current;
-    if (!previewCanvas || !selection || selection.width < 1 || selection.height < 1) {
-        console.warn("Cannot save: Invalid selection or preview canvas.");
-        return;
+    const handleSaveSelection = () => {
+        const previewCanvas = previewCanvasRef.current;
+        if (!previewCanvas || !selection || selection.width < 1 || selection.height < 1) {
+            console.warn("Cannot save: Invalid selection."); return;
+        };
+        try {
+            const dataUrl = previewCanvas.toDataURL('image/png');
+            onSaveSprite(selectedSpriteState, dataUrl);
+            setSelection(null); // Clear selection after saving
+        } catch (e) { console.error("Error generating data URL:", e); }
     };
 
-
-    // Get data URL from the preview canvas (which shows the correctly sized selection)
-    try {
-        const dataUrl = previewCanvas.toDataURL('image/png');
-        onSaveSprite(selectedSpriteState, dataUrl);
-        setSelection(null); // Clear selection after saving
-        // Draw is handled by useEffect
-    } catch (e) {
-        console.error("Error generating data URL:", e);
-         // Maybe show an error toast to the user
-    }
-
-  };
-
+   // --- Cursor Style ---
    const getCursor = () => {
         switch (tool) {
-            case 'pan':
-                return isDragging ? 'grabbing' : 'grab';
-            case 'select':
-                return 'crosshair';
-            case 'erase':
-            case 'draw':
-                // Ideally, show a custom cursor representing brush size/shape
-                return 'crosshair'; // Fallback
-            default:
-                return 'default';
+            case 'pan': return isDragging ? 'grabbing' : 'grab';
+            case 'select': return 'crosshair';
+            case 'erase': case 'draw': return 'crosshair'; // TODO: Custom brush cursor?
+            default: return 'default';
         }
     };
 
@@ -506,52 +497,37 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
        {/* Toolbar */}
        <TooltipProvider>
            <div className="flex items-center gap-1 p-1 border-b pixel-border bg-muted/50 flex-wrap">
+              {/* Tools */}
               <Tooltip>
                   <TooltipTrigger asChild>
-                     <Button variant={tool === 'pan' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('pan')} className="h-8 w-8">
-                       <MousePointer size={16} />
-                     </Button>
+                     <Button variant={tool === 'pan' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('pan')} className="h-8 w-8"> <MousePointer size={16} /> </Button>
                   </TooltipTrigger>
                   <TooltipContent><p>Pan (P)</p></TooltipContent>
                </Tooltip>
                <Tooltip>
                    <TooltipTrigger asChild>
-                      <Button variant={tool === 'select' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('select')} className="h-8 w-8">
-                        <Slice size={16}/>
-                      </Button>
+                      <Button variant={tool === 'select' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('select')} className="h-8 w-8"> <Slice size={16}/> </Button>
                    </TooltipTrigger>
                    <TooltipContent><p>Select (S)</p></TooltipContent>
                </Tooltip>
               <Tooltip>
                  <TooltipTrigger asChild>
-                    <Button variant={tool === 'draw' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('draw')} className="h-8 w-8">
-                       <Paintbrush size={16} />
-                    </Button>
+                    <Button variant={tool === 'draw' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('draw')} className="h-8 w-8"> <Paintbrush size={16} /> </Button>
                  </TooltipTrigger>
                  <TooltipContent><p>Brush (B)</p></TooltipContent>
               </Tooltip>
               <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant={tool === 'erase' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('erase')} className="h-8 w-8">
-                       <Eraser size={16} />
-                    </Button>
+                    <Button variant={tool === 'erase' ? "secondary" : "ghost"} size="icon" onClick={() => setTool('erase')} className="h-8 w-8"> <Eraser size={16} /> </Button>
                   </TooltipTrigger>
                   <TooltipContent><p>Eraser (E)</p></TooltipContent>
               </Tooltip>
 
+              {/* Brush/Eraser Options */}
               {(tool === 'erase' || tool === 'draw') && (
-                <>
-                   <Label htmlFor="brush-size" className="sr-only">Brush Size</Label>
-                   <Slider
-                       id="brush-size"
-                       defaultValue={[brushSize]}
-                       max={50}
-                       min={1}
-                       step={1}
-                       className="w-20 mx-2"
-                       onValueChange={(value) => setBrushSize(value[0])}
-                       aria-label="Brush Size"
-                   />
+                <div className="flex items-center mx-2">
+                   <Label htmlFor="brush-size" className="sr-only">Size</Label>
+                   <Slider id="brush-size" defaultValue={[brushSize]} max={50} min={1} step={1} className="w-20" onValueChange={(value) => setBrushSize(value[0])} aria-label="Brush Size"/>
                    <span className="text-xs w-6 text-right mr-2">{brushSize}px</span>
                    {tool === 'draw' && (
                       <Tooltip>
@@ -561,38 +537,65 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                            <TooltipContent><p>Draw Color</p></TooltipContent>
                       </Tooltip>
                    )}
-                </>
+                </div>
                )}
+
+               {/* Zoom & Undo */}
                <div className="flex items-center gap-1 ml-auto">
                    <Tooltip>
                       <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={handleZoomIn} className="h-8 w-8">
-                            <ZoomIn size={16} />
-                          </Button>
+                          <Button variant="ghost" size="icon" onClick={handleZoomIn} className="h-8 w-8"> <ZoomIn size={16} /> </Button>
                       </TooltipTrigger>
                       <TooltipContent><p>Zoom In (+)</p></TooltipContent>
                    </Tooltip>
                    <Tooltip>
                       <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={handleZoomOut} className="h-8 w-8">
-                            <ZoomOut size={16} />
-                          </Button>
+                          <Button variant="ghost" size="icon" onClick={handleZoomOut} className="h-8 w-8"> <ZoomOut size={16} /> </Button>
                       </TooltipTrigger>
                       <TooltipContent><p>Zoom Out (-)</p></TooltipContent>
                    </Tooltip>
                    <Tooltip>
                       <TooltipTrigger asChild>
-                           <Button variant="ghost" size="icon" onClick={handleUndo} disabled={historyIndex <= 0} className="h-8 w-8">
-                            <RotateCcw size={16} />
-                          </Button>
+                           <Button variant="ghost" size="icon" onClick={handleUndo} disabled={historyIndex <= 0} className="h-8 w-8"> <RotateCcw size={16} /> </Button>
                       </TooltipTrigger>
                        <TooltipContent><p>Undo (Ctrl+Z)</p></TooltipContent>
                    </Tooltip>
+                     {/* Help Dialog Trigger */}
+                   <AlertDialog>
+                       <Tooltip>
+                          <TooltipTrigger asChild>
+                               <AlertDialogTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-8 w-8"> <CircleHelp size={16} /> </Button>
+                               </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Help / Shortcuts</p></TooltipContent>
+                       </Tooltip>
+                       <AlertDialogContent className="pixel-border bg-card">
+                         <AlertDialogHeader>
+                           <AlertDialogTitle>Editor Shortcuts</AlertDialogTitle>
+                           <AlertDialogDescription>
+                             <ul className="list-disc list-inside space-y-1 text-sm">
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">P</kbd>: Pan Tool</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">S</kbd>: Select Tool</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">B</kbd>: Brush Tool</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">E</kbd>: Eraser Tool</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">+</kbd> / <kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">=</kbd>: Zoom In</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">-</kbd> / <kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">_</kbd>: Zoom Out</li>
+                               <li><kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">Z</kbd> (or <kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">Cmd</kbd>+<kbd className="px-1.5 py-0.5 border rounded bg-muted font-mono text-xs">Z</kbd>): Undo</li>
+                               <li><b>Mouse Wheel</b>: Zoom In/Out</li>
+                             </ul>
+                           </AlertDialogDescription>
+                         </AlertDialogHeader>
+                         <AlertDialogFooter>
+                           <AlertDialogAction className="btn-pixel">Got it!</AlertDialogAction>
+                         </AlertDialogFooter>
+                       </AlertDialogContent>
+                   </AlertDialog>
                </div>
            </div>
        </TooltipProvider>
 
-       {/* Canvas */}
+       {/* Canvas Area */}
        <div className="flex-grow overflow-hidden relative bg-gray-400" style={{ cursor: getCursor() }}>
          <canvas
            ref={canvasRef}
@@ -600,24 +603,20 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
            onMouseMove={handleMouseMove}
            onMouseUp={handleMouseUp}
            onMouseLeave={handleMouseLeave}
-           className="absolute top-0 left-0" // Position canvas absolutely
-           // DO NOT set width/height style here, use attributes instead
-           style={{ imageRendering: 'pixelated', touchAction: 'none' }}
+           onWheel={handleWheel} // Add wheel listener
+           className="absolute top-0 left-0" // Let CSS position it
+           style={{ imageRendering: 'pixelated', touchAction: 'none' }} // disable browser default touch actions like scroll/zoom
          />
        </div>
 
         {/* Preview and Save Area */}
-       {tool === 'select' && selection && selection.width >= 1 && selection.height >= 1 && ( // Only show if selection tool is active and selection is valid
+       {tool === 'select' && selection && selection.width >= 1 && selection.height >= 1 && (
            <div className="flex items-center gap-4 p-2 border-t pixel-border bg-muted/50">
               <div className="flex flex-col items-center">
                   <Label className="text-xs mb-1 font-semibold">Preview</Label>
-                  <canvas
-                    ref={previewCanvasRef}
-                    className="pixel-border bg-white max-w-[64px] max-h-[64px]"
+                  <canvas ref={previewCanvasRef} className="pixel-border bg-white max-w-[64px] max-h-[64px]"
                     style={{ imageRendering: 'pixelated' }}
-                    width={Math.max(1, Math.floor(selection.width))} // Set canvas attribute size
-                    height={Math.max(1, Math.floor(selection.height))}
-                   />
+                    width={Math.max(1, Math.floor(selection.width))} height={Math.max(1, Math.floor(selection.height))} />
               </div>
              <div className="flex-grow space-y-1">
                  <Label htmlFor="sprite-state-select" className="text-xs font-semibold">Assign to Pose:</Label>
@@ -634,7 +633,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                     </SelectContent>
                   </Select>
              </div>
-
              <Button onClick={handleSaveSelection} size="sm" className="btn-pixel-accent h-9 self-end">
                <Save size={14} className="mr-1" /> Save Pose
              </Button>
