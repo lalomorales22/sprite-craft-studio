@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Download, Image as ImageIcon, Sparkles, ArrowRight, Key, PenguinIcon } from 'lucide-react'; // Added Key, PenguinIcon
+import { ArrowLeft, Download, Image as ImageIcon, Sparkles, ArrowRight, Key } from 'lucide-react'; // Removed PenguinIcon, added Key
 import { generateWorldBackground } from '@/ai/flows/generate-world-background';
 import type { SpriteState, SpriteSlots } from '@/app/page';
 
@@ -29,6 +29,17 @@ const DOOR_WIDTH = 50;
 const DOOR_HEIGHT = 80;
 const TRANSITION_THRESHOLD = WORLD_WIDTH - CHARACTER_WIDTH - DOOR_WIDTH; // Point where transition starts (before door)
 const INTERACTION_DISTANCE = 20; // How close character needs to be to interact
+
+// --- Inline Penguin SVG ---
+const PenguinIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M12 20c-1.7 0-3-1.3-3-3v-7h6v7c0 1.7-1.3 3-3 3z"/>
+        <path d="M10 10V8c0-1.1.9-2 2-2s2 .9 2 2v2"/>
+        <path d="M5 17v-5h2v5H5z"/>
+        <path d="M17 17v-5h2v5h-2z"/>
+        <circle cx="12" cy="6" r="1"/>
+    </svg>
+);
 
 // --- Component: Door ---
 const Door = React.memo(({ locked }: { locked: boolean }) => (
@@ -345,7 +356,7 @@ export default function WorldPage() {
                 <Input id="world-description" type="text" value={initialWorldDescription} onChange={(e) => setInitialWorldDescription(e.target.value)}
                     placeholder="e.g., magical forest, futuristic city ruins" className="input-pixel flex-grow" disabled={isGeneratingWorld} />
                 <Button onClick={handleInitialGenerate} disabled={isGeneratingWorld || !initialWorldDescription} className="btn-pixel flex-shrink-0">
-                    {isGeneratingWorld ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5" /* SVG Spinner */></svg>Generating...</> : <><Sparkles size={16} className="mr-1"/>Generate</>}
+                    {isGeneratingWorld ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-primary-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Generating...</> : <><Sparkles size={16} className="mr-1"/>Generate</>}
                 </Button>
             </div>
        )}
@@ -367,9 +378,7 @@ export default function WorldPage() {
         {/* Penguin */}
         {penguin && !penguin.collected && generatedWorldBackground && (
            <div className="absolute z-10" style={{ left: `${penguin.x}px`, bottom: `${WORLD_HEIGHT - penguin.y - ITEM_HEIGHT}px`, width: `${ITEM_WIDTH}px`, height: `${ITEM_HEIGHT}px` }}>
-                {/* Replace with actual Penguin Icon/Image if available */}
                 <PenguinIcon className="w-full h-full text-black bg-white rounded p-1 pixel-border" />
-                {/* <Image src="/path/to/penguin.png" alt="Penguin" width={ITEM_WIDTH} height={ITEM_HEIGHT} style={{ imageRendering: 'pixelated' }} unoptimized /> */}
            </div>
         )}
 
@@ -405,7 +414,7 @@ export default function WorldPage() {
          {isGeneratingWorld && isTransitioningRef.current && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
                    <div className="text-white text-xl flex items-center gap-2">
-                       <svg className="animate-spin h-5 w-5 text-white" /* SVG Spinner */></svg> Loading Next Area...
+                       <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Loading Next Area...
                    </div>
               </div>
          )}
