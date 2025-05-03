@@ -43,77 +43,72 @@ interface SpriteEditorProps {
 }
 
 const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spriteSlots }) => {
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for the canvas container
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [startDrag, setStartDrag] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false); // For panning
+  const [startDrag, setStartDrag] = useState({ x: 0, y: 0 }); // For panning calculation
   const [selection, setSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [startSelect, setStartSelect] = useState({ x: 0, y: 0 });
+  const [startSelect, setStartSelect] = useState({ x: 0, y: 0 }); // For selection calculation
   const [tool, setTool] = useState<Tool>('pan');
   const [brushSize, setBrushSize] = useState(5);
   const [drawColor, setDrawColor] = useState('#000000');
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false); // For draw/erase
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [selectedSpriteState, setSelectedSpriteState] = useState<SpriteState>('standing');
-
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 }); // Store original image dimensions
 
   // --- Drawing Logic ---
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
-    const img = imageRef.current;
 
-    if (!canvas || !ctx ) return;
+    if (!canvas || !ctx || imageDimensions.width === 0 || imageDimensions.height === 0) return;
+
     ctx.imageSmoothingEnabled = false; // Ensure crisp pixels
 
-    // Clear canvas & draw checkered background
+    // Clear canvas (drawing surface)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const patternSize = 10; // Checkered pattern size
-    for (let i = 0; i < canvas.width; i += patternSize) {
-        for (let j = 0; j < canvas.height; j += patternSize) {
-            ctx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
-            ctx.fillRect(i, j, patternSize, patternSize);
-        }
+
+    // Apply zoom and pan *relative to the canvas center* for stability
+    ctx.save();
+    ctx.translate(canvas.width / 2 + offset.x, canvas.height / 2 + offset.y); // Move origin to center + offset
+    ctx.scale(zoom, zoom);
+    ctx.translate(-imageDimensions.width / 2, -imageDimensions.height / 2); // Move origin to top-left of scaled image
+
+    // Draw checkered background covering the image area
+    const patternSize = 10 / zoom; // Make pattern smaller when zoomed in
+    for (let i = 0; i < imageDimensions.width; i += patternSize) {
+      for (let j = 0; j < imageDimensions.height; j += patternSize) {
+        ctx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+        ctx.fillRect(i, j, patternSize, patternSize);
+      }
     }
 
-    // Apply zoom and pan
-    ctx.save();
-    ctx.translate(offset.x, offset.y);
-    ctx.scale(zoom, zoom);
-
     // Draw the current state from history
-     if (history[historyIndex]) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = history[historyIndex].width;
-        tempCanvas.height = history[historyIndex].height;
-        const tempCtx = tempCanvas.getContext('2d');
-        if (tempCtx) {
-            tempCtx.putImageData(history[historyIndex], 0, 0);
-            ctx.drawImage(tempCanvas, 0, 0);
-        }
-     } else if (img) { // Fallback: Draw original image if history is empty
-         console.log("Drawing fallback image as history is empty or invalid index.");
-         // Check if the canvas is tainted before attempting to draw
-         try {
-            ctx.drawImage(img, 0, 0);
-         } catch (e) {
-             console.error("Error drawing fallback image (potentially tainted canvas):", e);
-             // Display an error message on the canvas?
-             ctx.restore(); // Restore before drawing error message
-             ctx.fillStyle = 'red';
-             ctx.font = '16px Pixelify Sans';
-             ctx.textAlign = 'center';
-             ctx.fillText('Error: Could not load image (CORS?)', canvas.width / 2, canvas.height / 2);
-             return; // Stop further drawing
-         }
-     }
+    if (history[historyIndex]) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = history[historyIndex].width;
+      tempCanvas.height = history[historyIndex].height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCtx.putImageData(history[historyIndex], 0, 0);
+        // Ensure drawing happens at the correct (0,0) relative to the scaled/translated context
+        ctx.drawImage(tempCanvas, 0, 0, imageDimensions.width, imageDimensions.height);
+      } else {
+          console.error("SpriteEditor: Could not get temp context for drawing history.");
+      }
+    } else {
+        console.warn("SpriteEditor: No valid history state to draw.");
+         // Optionally draw a placeholder or error message if history is empty when expected
+    }
 
-     // Draw selection rectangle
+    // Draw selection rectangle
     if (selection && tool === 'select') {
       ctx.strokeStyle = 'rgba(255, 105, 180, 0.9)'; // Accent Pink
       ctx.lineWidth = 2 / zoom;
@@ -123,40 +118,68 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
     }
 
     ctx.restore();
-  }, [zoom, offset, selection, history, historyIndex, tool]);
+  }, [zoom, offset, selection, history, historyIndex, tool, imageDimensions]);
+
 
   // --- History Management ---
-  const saveToHistory = useCallback(() => {
+   const saveToHistory = useCallback(() => {
      const canvas = canvasRef.current;
-     const img = imageRef.current;
-     if (!canvas || !img) return;
+     const img = imageRef.current; // Use imageRef for dimensions
+     if (!canvas || !img || imageDimensions.width === 0 || imageDimensions.height === 0) {
+        console.warn("Cannot save history: Canvas or image dimensions not ready.");
+        return;
+     }
 
      // Need to capture the *current visual state* but at *original image resolution*
      // Create a temporary canvas with original image dimensions
      const tempCanvas = document.createElement('canvas');
-     tempCanvas.width = img.width;
-     tempCanvas.height = img.height;
+     tempCanvas.width = imageDimensions.width; // Use stored original dimensions
+     tempCanvas.height = imageDimensions.height;
      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-     if (!tempCtx) return;
+     if (!tempCtx) {
+        console.error("Could not create temporary canvas context for history.");
+        return;
+     }
 
      tempCtx.imageSmoothingEnabled = false;
 
-      // Draw the checkered background first (on the temp canvas)
-     const patternSize = 10;
-     for (let i = 0; i < tempCanvas.width; i += patternSize) {
-        for (let j = 0; j < tempCanvas.height; j += patternSize) {
-            tempCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
-            tempCtx.fillRect(i, j, patternSize, patternSize);
-        }
-     }
+      // Draw the checkered background first (on the temp canvas) - Optional, depends if you want it in history
+     // const patternSize = 10;
+     // for (let i = 0; i < tempCanvas.width; i += patternSize) {
+     //    for (let j = 0; j < tempCanvas.height; j += patternSize) {
+     //        tempCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+     //        tempCtx.fillRect(i, j, patternSize, patternSize);
+     //    }
+     // }
 
       // Draw the current image data (from the last history state) onto the temp canvas
-      if (history[historyIndex]) {
+      if (historyIndex >= 0 && history[historyIndex]) {
+         // Create a canvas from the ImageData in history
          const historyCanvas = document.createElement('canvas');
          historyCanvas.width = history[historyIndex].width;
          historyCanvas.height = history[historyIndex].height;
-         historyCanvas.getContext('2d')?.putImageData(history[historyIndex], 0, 0);
-         tempCtx.drawImage(historyCanvas, 0, 0);
+         const historyCtx = historyCanvas.getContext('2d');
+         if (historyCtx) {
+            historyCtx.putImageData(history[historyIndex], 0, 0);
+            // Draw the history canvas onto the temp canvas
+            tempCtx.drawImage(historyCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+         } else {
+             console.error("Could not get context for history canvas.");
+             return; // Abort if context fails
+         }
+      } else {
+          console.warn("No valid history state to save from.");
+          // Draw the original image if history is empty? This might be needed on first edit.
+          if(img) {
+              try {
+                tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+              } catch (e) {
+                 console.error("Error drawing original image to history temp canvas:", e);
+                 return; // Abort on error
+              }
+          } else {
+              return; // Abort if no history and no original image ref
+          }
       }
 
 
@@ -164,15 +187,20 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
       try {
         const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
          const newHistory = history.slice(0, historyIndex + 1);
-         // Avoid saving identical states
-         if (historyIndex >= 0) {
+
+         // Avoid saving identical states (optional optimization)
+         if (historyIndex >= 0 && history[historyIndex]) {
              const lastData = history[historyIndex].data;
              const currentData = imageData.data;
              let same = true;
-             for (let i = 0; i < lastData.length; i++) {
-                 if (lastData[i] !== currentData[i]) {
-                     same = false;
-                     break;
+             if (lastData.length !== currentData.length) {
+                 same = false;
+             } else {
+                 for (let i = 0; i < lastData.length; i++) {
+                     if (lastData[i] !== currentData[i]) {
+                         same = false;
+                         break;
+                     }
                  }
              }
              if (same) {
@@ -193,7 +221,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
              // Maybe show a toast?
           }
       }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, imageDimensions]);
 
   const handleUndo = useCallback(() => {
       if (historyIndex > 0) {
@@ -210,305 +238,363 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
   useEffect(() => {
     console.log("SpriteEditor: Image URL Changed:", imageUrl?.substring(0, 100) + "...");
     const canvas = canvasRef.current;
+    const container = containerRef.current; // Use container ref
     const ctx = canvas?.getContext('2d');
     const img = new window.Image();
     // IMPORTANT: Add crossOrigin attribute BEFORE setting src
     img.crossOrigin = "anonymous"; // Allow loading cross-origin images for canvas manipulation
 
     img.onload = () => {
-       console.log("SpriteEditor: Image Loaded successfully:", img.width, img.height);
-      if (!canvas || !ctx) {
-          console.error("SpriteEditor: Canvas or context not available on image load.");
-          return;
+      console.log("SpriteEditor: Image Loaded successfully:", img.width, img.height);
+      if (!canvas || !ctx || !container) {
+        console.error("SpriteEditor: Canvas, context, or container not available on image load.");
+        return;
       }
       imageRef.current = img;
+      setImageDimensions({ width: img.width, height: img.height }); // Store original dimensions
 
-      // Set canvas actual drawing surface size to match image
-       // Use CSS for display size, keep canvas resolution matching image
-       canvas.width = img.width;
-       canvas.height = img.height;
+      // Set canvas *drawing surface* size based on container for responsiveness
+      // We'll scale the image drawing within this surface
+      const containerWidth = container.offsetWidth;
+      const containerHeight = container.offsetHeight;
+      canvas.width = containerWidth;
+      canvas.height = containerHeight;
+
+      // Calculate initial zoom to fit image within container
+      const zoomX = containerWidth / img.width;
+      const zoomY = containerHeight / img.height;
+      const initialZoom = Math.min(1, zoomX, zoomY); // Fit while respecting max 1x zoom
 
       // Reset state for new image
-      setZoom(1);
+      setZoom(initialZoom);
+      setOffset({ x: 0, y: 0 }); // Center the image using translate in draw()
       setSelection(null);
       setIsSelecting(false);
-      setTool('pan');
+      setTool('pan'); // Default tool
       setHistory([]); // Clear history for new image
       setHistoryIndex(-1);
 
-      // Center the image initially
-       const container = canvas.parentElement; // Get the container div
-       if (container) {
-           const containerWidth = container.offsetWidth;
-           const containerHeight = container.offsetHeight;
-           // Fit image within container initially, but ensure canvas resolution matches image
-           const initialZoomX = containerWidth / img.width;
-           const initialZoomY = containerHeight / img.height;
-           const initialZoom = Math.min(1, initialZoomX, initialZoomY); // Max 1x zoom
+      console.log("SpriteEditor: Initial setup - Container:", containerWidth, "x", containerHeight, "Image:", img.width, "x", img.height, "Initial Zoom:", initialZoom);
 
-           // Canvas resolution stays img.width x img.height
-           // Adjust CSS size for initial view
-           canvas.style.width = `${img.width * initialZoom}px`;
-           canvas.style.height = `${img.height * initialZoom}px`;
-
-
-           const initialOffsetX = (containerWidth - img.width * initialZoom) / 2;
-           const initialOffsetY = (containerHeight - img.height * initialZoom) / 2;
-           setOffset({ x: initialOffsetX, y: initialOffsetY });
-           setZoom(initialZoom); // Set the calculated initial zoom
-           console.log("SpriteEditor: Initial zoom:", initialZoom, "Offset:", initialOffsetX, initialOffsetY, "Canvas Size (CSS):", canvas.style.width, canvas.style.height, "Resolution:", canvas.width, canvas.height);
-       } else {
-            console.warn("SpriteEditor: Could not find container element for initial centering.");
-            setOffset({ x: 0, y: 0 }); // Fallback if no container
-            setZoom(1);
-            canvas.style.width = `${img.width}px`;
-            canvas.style.height = `${img.height}px`;
-       }
-
-       // Draw initial image onto a temporary canvas to get ImageData for history
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = img.width;
-        tempCanvas.height = img.height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-        if (tempCtx) {
-            tempCtx.imageSmoothingEnabled = false;
-            tempCtx.drawImage(img, 0, 0);
-             try {
-                 const initialImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height); // Use tempCanvas dimensions
-                 setHistory([initialImageData]);
-                 setHistoryIndex(0);
-                 console.log("SpriteEditor: Initial history saved from loaded image.");
-                  // Explicitly trigger draw after history is set
-                  requestAnimationFrame(() => draw());
-             } catch (e) {
-                  console.error("SpriteEditor: Error getting initial ImageData:", e);
-                  // Handle CORS or other errors
-                  if (e instanceof DOMException && e.name === 'SecurityError') {
-                     console.warn("SpriteEditor: Could not get ImageData due to CORS. Editing features may be limited.");
-                     // Set history with a placeholder or redraw differently?
-                     // For now, just clear history to avoid errors.
-                     setHistory([]);
-                     setHistoryIndex(-1);
-                     // Force a draw call with the original image ref (may still fail if tainted)
-                     requestAnimationFrame(() => draw());
-                  }
-             }
-        } else {
-             console.error("SpriteEditor: Could not get temp context for initial history save.");
-             requestAnimationFrame(() => draw()); // Still try to draw the image ref
+      // Draw initial image onto a temporary canvas to get ImageData for history
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = img.width;
+      tempCanvas.height = img.height;
+      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+      if (tempCtx) {
+        tempCtx.imageSmoothingEnabled = false;
+        try {
+          tempCtx.drawImage(img, 0, 0);
+          const initialImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          setHistory([initialImageData]);
+          setHistoryIndex(0);
+          console.log("SpriteEditor: Initial history saved from loaded image.");
+          // Explicitly trigger draw after history is set and state updates are likely processed
+          requestAnimationFrame(() => draw());
+        } catch (e) {
+          console.error("SpriteEditor: Error getting initial ImageData:", e);
+          if (e instanceof DOMException && e.name === 'SecurityError') {
+            console.warn("SpriteEditor: Could not get ImageData due to CORS. Editing features may be limited.");
+            setHistory([]);
+            setHistoryIndex(-1);
+            requestAnimationFrame(() => draw()); // Try drawing placeholder/error
+          }
         }
+      } else {
+        console.error("SpriteEditor: Could not get temp context for initial history save.");
+        requestAnimationFrame(() => draw()); // Still try to draw
+      }
     };
     img.onerror = (e) => {
       console.error("SpriteEditor: Error loading image:", e, "from URL:", imageUrl?.substring(0, 100) + "...");
       if (canvas && ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          // Optionally draw error message on canvas
-          ctx.fillStyle = 'red';
-          ctx.font = '16px Pixelify Sans';
-          ctx.textAlign = 'center';
-          ctx.fillText('Error loading image.', canvas.width / 2, canvas.height / 2);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'red';
+        ctx.font = '16px Pixelify Sans';
+        ctx.textAlign = 'center';
+        ctx.fillText('Error loading image.', canvas.width / 2, canvas.height / 2);
       }
-      imageRef.current = null; setHistory([]); setHistoryIndex(-1); setSelection(null);
+      imageRef.current = null;
+      setImageDimensions({ width: 0, height: 0 });
+      setHistory([]);
+      setHistoryIndex(-1);
+      setSelection(null);
+      setOffset({ x: 0, y: 0 });
+      setZoom(1);
     }
 
     // Set the src AFTER defining onload/onerror and setting crossOrigin
     if (imageUrl) {
-        console.log("Setting image src:", imageUrl.substring(0, 100) + "...");
-        img.src = imageUrl;
+      console.log("Setting image src:", imageUrl.substring(0, 100) + "...");
+      img.src = imageUrl;
     } else {
-        console.warn("SpriteEditor: Received null or empty imageUrl.");
-        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        imageRef.current = null; setHistory([]); setHistoryIndex(-1); setSelection(null);
+      console.warn("SpriteEditor: Received null or empty imageUrl.");
+      if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      imageRef.current = null;
+      setImageDimensions({ width: 0, height: 0 });
+      setHistory([]);
+      setHistoryIndex(-1);
+      setSelection(null);
+      setOffset({ x: 0, y: 0 });
+      setZoom(1);
+    }
+
+    // Resize observer for container
+    const resizeObserver = new ResizeObserver(entries => {
+        if (!entries || entries.length === 0) return;
+        const { width, height } = entries[0].contentRect;
+        if (canvas && (canvas.width !== width || canvas.height !== height)) {
+            canvas.width = width;
+            canvas.height = height;
+            console.log("Resized canvas to:", width, height);
+            // Recalculate zoom/offset if needed, or just redraw
+            requestAnimationFrame(draw);
+        }
+    });
+
+    if (container) {
+        resizeObserver.observe(container);
     }
 
 
     return () => {
-        // Cleanup image reference
+        // Cleanup image reference and observer
         if (imageRef.current) {
             imageRef.current.onload = null;
             imageRef.current.onerror = null;
         }
         imageRef.current = null;
-        console.log("SpriteEditor: Image ref cleaned up.");
+        if (container) {
+            resizeObserver.unobserve(container);
+        }
+        console.log("SpriteEditor: Image ref and observer cleaned up.");
      };
-  }, [imageUrl, draw]); // Include draw in dependencies now that it's stable
+  }, [imageUrl]); // Rerun only when imageUrl changes
+
 
     // Redraw whenever relevant state changes
     useEffect(() => {
-        console.log("SpriteEditor: Redrawing canvas due to state change.", { zoom, offset, selection: !!selection, historyIndex, tool });
+        //console.log("SpriteEditor: Redrawing canvas due to state change.", { zoom, offset, selection: !!selection, historyIndex, tool });
         requestAnimationFrame(() => draw());
-    }, [draw, zoom, offset, selection, historyIndex, tool]); // Added tool
+    }, [draw, zoom, offset, selection, historyIndex, tool]); // Include all relevant state
 
 
    // Update preview canvas
-  useEffect(() => {
-    const previewCanvas = previewCanvasRef.current;
-    const previewCtx = previewCanvas?.getContext('2d', { willReadFrequently: true });
+   useEffect(() => {
+       const previewCanvas = previewCanvasRef.current;
+       const previewCtx = previewCanvas?.getContext('2d', { willReadFrequently: true });
 
-    if (!previewCanvas || !previewCtx || !selection || !imageRef.current || selection.width < 1 || selection.height < 1) {
-        if(previewCanvas && previewCtx) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-        return;
-    }
-    previewCtx.imageSmoothingEnabled = false;
-
-     const imgWidth = imageRef.current.width;
-     const imgHeight = imageRef.current.height;
-     const clampedX = Math.max(0, Math.floor(selection.x));
-     const clampedY = Math.max(0, Math.floor(selection.y));
-     const clampedW = Math.min(imgWidth - clampedX, Math.max(1, Math.floor(selection.width)));
-     const clampedH = Math.min(imgHeight - clampedY, Math.max(1, Math.floor(selection.height)));
-
-     if (clampedW > 0 && clampedH > 0 && historyIndex >= 0 && history[historyIndex]) {
-         const sourceImageData = history[historyIndex];
-         const tempCanvas = document.createElement('canvas');
-         tempCanvas.width = sourceImageData.width; tempCanvas.height = sourceImageData.height;
-         const tempCtx = tempCanvas.getContext('2d');
-         if (tempCtx) {
-             tempCtx.putImageData(sourceImageData, 0, 0);
-             previewCanvas.width = clampedW; previewCanvas.height = clampedH;
-             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-
-             // Draw checkered background for preview transparency
-             const patternSize = 5;
-             for (let i = 0; i < previewCanvas.width; i += patternSize) {
-                 for (let j = 0; j < previewCanvas.height; j += patternSize) {
-                     previewCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
-                     previewCtx.fillRect(i, j, patternSize, patternSize);
-                 }
-             }
-
-             // Draw selected portion onto preview
-             previewCtx.drawImage( tempCanvas, clampedX, clampedY, clampedW, clampedH, 0, 0, clampedW, clampedH );
-         } else { previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); }
-     } else { previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height); }
-  }, [selection, history, historyIndex]); // Removed zoom, offset as they don't affect preview content
-
-
-  // --- Mouse Event Handling ---
-  const getCanvasCoordinates = (clientX: number, clientY: number): { x: number; y: number } => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    // Calculate mouse position relative to the *displayed* canvas element
-    const mouseX = clientX - rect.left;
-    const mouseY = clientY - rect.top;
-
-    // Convert mouse position to image coordinates based on current zoom and offset
-    // Note: offset is applied *before* scaling in the draw function
-    const imageX = (mouseX - offset.x) / zoom;
-    const imageY = (mouseY - offset.y) / zoom;
-
-    return { x: imageX, y: imageY };
-};
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-     const coords = getCanvasCoordinates(e.clientX, e.clientY);
-     console.log("Mouse Down - Canvas Coords:", coords); // Log coords
-     if (tool === 'select') {
-       setIsSelecting(true); setStartSelect(coords);
-       setSelection({ x: coords.x, y: coords.y, width: 0, height: 0});
-     } else if (tool === 'erase' || tool === 'draw') {
-        setIsDrawing(true); applyTool(coords.x, coords.y);
-     } else if (tool === 'pan') {
-       setIsDragging(true); setStartDrag({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-     }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getCanvasCoordinates(e.clientX, e.clientY);
-    const img = imageRef.current;
-    if (!img) return;
-
-    if (isSelecting && tool === 'select') {
-       const currentX = Math.max(0, Math.min(coords.x, img.width));
-       const currentY = Math.max(0, Math.min(coords.y, img.height));
-       const width = currentX - startSelect.x; const height = currentY - startSelect.y;
-       setSelection({ x: width > 0 ? startSelect.x : currentX, y: height > 0 ? startSelect.y : currentY,
-         width: Math.abs(width), height: Math.abs(height), });
-    } else if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-       applyTool(coords.x, coords.y);
-    } else if (isDragging && tool === 'pan') {
-       // Calculate the new offset based on mouse movement
-       const newOffsetX = e.clientX - startDrag.x;
-       const newOffsetY = e.clientY - startDrag.y;
-       setOffset({ x: newOffsetX, y: newOffsetY });
-
-       // Update canvas style immediately for panning feedback
-       const canvas = canvasRef.current;
-       if (canvas) {
-           canvas.style.transform = `translate(${newOffsetX}px, ${newOffsetY}px) scale(${zoom})`;
+       if (!previewCanvas || !previewCtx || !selection || selection.width < 1 || selection.height < 1) {
+           if (previewCanvas && previewCtx) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+           return;
        }
-    }
-  };
+       previewCtx.imageSmoothingEnabled = false;
 
-  const handleMouseUp = () => {
-    if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-        saveToHistory();
-    }
-     if (isSelecting && tool === 'select' && selection && (selection.width < 1 || selection.height < 1)) {
-        setSelection(null);
-     }
-     if (isDragging && tool === 'pan') {
-         // Ensure final offset state is set (already done in mouseMove, but good practice)
-         // Reset transform style if needed (or let draw handle it)
-         const canvas = canvasRef.current;
-         if (canvas) {
-             // Let the main draw loop handle the final transform based on state
-             canvas.style.transform = '';
-             requestAnimationFrame(draw); // Trigger redraw with final state
-         }
-     }
-    setIsSelecting(false); setIsDrawing(false); setIsDragging(false);
-  };
+       const sourceImageData = history[historyIndex];
+       if (!sourceImageData || imageDimensions.width === 0 || imageDimensions.height === 0) {
+           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+           return; // Ensure we have source data and dimensions
+       }
 
-   const handleMouseLeave = () => {
-    if (isDrawing && (tool === 'erase' || tool === 'draw')) saveToHistory();
-     if (isSelecting && selection && (selection.width < 1 || selection.height < 1)) setSelection(null);
-      if (isDragging && tool === 'pan') {
-         // Ensure final offset state is set and redraw
-         const canvas = canvasRef.current;
-          if (canvas) {
-              canvas.style.transform = '';
-              requestAnimationFrame(draw);
-          }
-      }
-     setIsSelecting(false); setIsDrawing(false); setIsDragging(false);
+       // Clamp selection to image bounds
+       const clampedX = Math.max(0, Math.floor(selection.x));
+       const clampedY = Math.max(0, Math.floor(selection.y));
+       const clampedW = Math.min(imageDimensions.width - clampedX, Math.max(1, Math.floor(selection.width)));
+       const clampedH = Math.min(imageDimensions.height - clampedY, Math.max(1, Math.floor(selection.height)));
+
+       if (clampedW > 0 && clampedH > 0) {
+           // Create a temporary canvas from the *full* history ImageData
+           const tempCanvas = document.createElement('canvas');
+           tempCanvas.width = sourceImageData.width;
+           tempCanvas.height = sourceImageData.height;
+           const tempCtx = tempCanvas.getContext('2d');
+
+           if (tempCtx) {
+               tempCtx.putImageData(sourceImageData, 0, 0);
+
+               // Set preview canvas size to match the *selection* dimensions
+               previewCanvas.width = clampedW;
+               previewCanvas.height = clampedH;
+               previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+               // Draw checkered background for preview transparency
+               const patternSize = 5;
+               for (let i = 0; i < previewCanvas.width; i += patternSize) {
+                   for (let j = 0; j < previewCanvas.height; j += patternSize) {
+                       previewCtx.fillStyle = ((Math.floor(i / patternSize) + Math.floor(j / patternSize)) % 2 === 0) ? '#ccc' : '#fff';
+                       previewCtx.fillRect(i, j, patternSize, patternSize);
+                   }
+               }
+
+               // Draw the selected portion from the temporary canvas onto the preview canvas
+               previewCtx.drawImage(
+                   tempCanvas,
+                   clampedX, clampedY, // Source rectangle (x, y, w, h) from the full history image
+                   clampedW, clampedH,
+                   0, 0,           // Destination rectangle (x, y, w, h) on the preview canvas
+                   clampedW, clampedH
+               );
+           } else {
+               console.error("Could not get context for temp history canvas in preview.");
+               previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+           }
+       } else {
+           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+       }
+   }, [selection, history, historyIndex, imageDimensions]); // Depend on imageDimensions
+
+
+   // --- Mouse Event Handling ---
+   const getCanvasCoordinates = useCallback((clientX: number, clientY: number): { x: number; y: number } => {
+       const canvas = canvasRef.current;
+       if (!canvas || imageDimensions.width === 0 || imageDimensions.height === 0) return { x: 0, y: 0 };
+       const rect = canvas.getBoundingClientRect();
+
+       // Mouse position relative to the canvas element's top-left
+       const mouseX = clientX - rect.left;
+       const mouseY = clientY - rect.top;
+
+       // Convert mouse coordinates to image coordinates
+       // 1. Translate mouse relative to canvas center
+       const mouseRelativeToCenterX = mouseX - canvas.width / 2;
+       const mouseRelativeToCenterY = mouseY - canvas.height / 2;
+
+       // 2. Account for pan offset
+       const mouseRelativeToPanX = mouseRelativeToCenterX - offset.x;
+       const mouseRelativeToPanY = mouseRelativeToCenterY - offset.y;
+
+       // 3. Account for zoom
+       const mouseRelativeToZoomX = mouseRelativeToPanX / zoom;
+       const mouseRelativeToZoomY = mouseRelativeToPanY / zoom;
+
+       // 4. Translate relative to image top-left
+       const imageX = mouseRelativeToZoomX + imageDimensions.width / 2;
+       const imageY = mouseRelativeToZoomY + imageDimensions.height / 2;
+
+       return { x: imageX, y: imageY };
+   }, [zoom, offset, imageDimensions]);
+
+
+   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+       const coords = getCanvasCoordinates(e.clientX, e.clientY);
+       //console.log("Mouse Down - Image Coords:", coords);
+
+       if (tool === 'select') {
+           setIsSelecting(true);
+           setStartSelect(coords);
+           // Initialize selection, clamp start coords to image bounds
+           const startX = Math.max(0, Math.min(coords.x, imageDimensions.width));
+           const startY = Math.max(0, Math.min(coords.y, imageDimensions.height));
+           setSelection({ x: startX, y: startY, width: 0, height: 0 });
+       } else if (tool === 'erase' || tool === 'draw') {
+           setIsDrawing(true);
+           // Apply tool immediately on click
+           applyTool(coords.x, coords.y);
+       } else if (tool === 'pan') {
+           setIsDragging(true);
+           // Store starting mouse position and current offset
+           setStartDrag({ x: e.clientX, y: e.clientY });
+       }
    };
 
-   // --- Wheel Event for Zoom ---
+   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+       const coords = getCanvasCoordinates(e.clientX, e.clientY);
+
+       if (isSelecting && tool === 'select' && imageDimensions.width > 0 && imageDimensions.height > 0) {
+           // Clamp current coords to image bounds
+           const currentX = Math.max(0, Math.min(coords.x, imageDimensions.width));
+           const currentY = Math.max(0, Math.min(coords.y, imageDimensions.height));
+
+           const width = currentX - startSelect.x;
+           const height = currentY - startSelect.y;
+
+           // Update selection based on direction
+           setSelection({
+               x: width >= 0 ? startSelect.x : currentX,
+               y: height >= 0 ? startSelect.y : currentY,
+               width: Math.abs(width),
+               height: Math.abs(height),
+           });
+       } else if (isDrawing && (tool === 'erase' || tool === 'draw')) {
+           applyTool(coords.x, coords.y); // Apply tool continuously while drawing
+       } else if (isDragging && tool === 'pan') {
+           const dx = e.clientX - startDrag.x;
+           const dy = e.clientY - startDrag.y;
+           // Update offset based on mouse movement delta
+           setOffset(prevOffset => ({ x: prevOffset.x + dx, y: prevOffset.y + dy }));
+           // Update startDrag for the next move calculation
+           setStartDrag({ x: e.clientX, y: e.clientY });
+       }
+   };
+
+
+   const handleMouseUp = () => {
+       if (isDrawing && (tool === 'erase' || tool === 'draw')) {
+           // Save the state after finishing a draw/erase stroke
+           saveToHistory();
+       }
+       if (isSelecting && tool === 'select' && selection && (selection.width < 1 || selection.height < 1)) {
+           // Clear selection if it's effectively zero-sized
+           setSelection(null);
+       }
+       setIsSelecting(false);
+       setIsDrawing(false);
+       setIsDragging(false);
+   };
+
+   const handleMouseLeave = () => {
+       // Treat leaving the canvas like mouse up
+       if (isDrawing && (tool === 'erase' || tool === 'draw')) {
+           saveToHistory();
+       }
+       if (isSelecting && selection && (selection.width < 1 || selection.height < 1)) {
+           setSelection(null);
+       }
+       setIsSelecting(false);
+       setIsDrawing(false);
+       setIsDragging(false);
+   };
+
+    // --- Wheel Event for Zoom ---
     const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
         e.preventDefault();
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const rect = canvas.getBoundingClientRect();
-        // Mouse position relative to canvas top-left
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        const mouseX = e.clientX - rect.left; // Mouse X relative to canvas element
+        const mouseY = e.clientY - rect.top;  // Mouse Y relative to canvas element
 
-        // Calculate coordinates relative to the *image* before zoom
-        const imageX = (mouseX - offset.x) / zoom;
-        const imageY = (mouseY - offset.y) / zoom;
+        // Calculate image coordinates under the mouse *before* zoom
+        const imageCoordsBeforeZoom = getCanvasCoordinates(e.clientX, e.clientY);
 
-        // Determine zoom direction and factor
+        // Determine zoom factor
         const delta = e.deltaY > 0 ? 1 / 1.1 : 1.1; // Zoom out / Zoom in factor
         const newZoom = Math.max(0.1, Math.min(zoom * delta, 32)); // Clamp zoom level
 
-        // Calculate new offset to keep the point under the mouse stationary
-        const newOffsetX = mouseX - imageX * newZoom;
-        const newOffsetY = mouseY - imageY * newZoom;
+        // Calculate the new offset to keep the point under the mouse stationary
+        // The position of the image coordinate (imageX, imageY) relative to the canvas center should remain the same after zoom.
+        // Let (cx, cy) be the canvas center (canvas.width/2, canvas.height/2)
+        // Let (ix, iy) be the image coordinates under the mouse
+        // Let (imgW, imgH) be the image dimensions
+        // Before zoom: mouseX = cx + offset.x + (ix - imgW/2) * zoom
+        //              mouseY = cy + offset.y + (iy - imgH/2) * zoom
+        // After zoom: mouseX = cx + newOffset.x + (ix - imgW/2) * newZoom
+        //             mouseY = cy + newOffset.y + (iy - imgH/2) * newZoom
+        // Solving for newOffset:
+        // newOffset.x = mouseX - cx - (ix - imgW/2) * newZoom
+        // newOffset.y = mouseY - cy - (iy - imgH/2) * newZoom
+
+        const newOffsetX = mouseX - canvas.width / 2 - (imageCoordsBeforeZoom.x - imageDimensions.width / 2) * newZoom;
+        const newOffsetY = mouseY - canvas.height / 2 - (imageCoordsBeforeZoom.y - imageDimensions.height / 2) * newZoom;
 
         setZoom(newZoom);
         setOffset({ x: newOffsetX, y: newOffsetY });
 
-         // Update canvas style immediately for zoom feedback
-         canvas.style.transform = `translate(${newOffsetX}px, ${newOffsetY}px) scale(${newZoom})`;
-         canvas.style.width = `${canvas.width * newZoom}px`;
-         canvas.style.height = `${canvas.height * newZoom}px`;
-
-          // Let the main draw loop handle the final drawing at the new scale
-         requestAnimationFrame(draw);
+         // Let the main draw loop handle the drawing at the new scale/offset
+        // requestAnimationFrame(draw); // Draw is triggered by useEffect on zoom/offset change
     };
+
 
     // --- Keyboard Shortcuts ---
     useEffect(() => {
@@ -540,17 +626,16 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
 
    // --- Tool Application Logic ---
    const applyTool = (imgX: number, imgY: number) => {
-      const canvas = canvasRef.current;
-      // Don't get context here, operate on ImageData
-      const img = imageRef.current;
-      if (!canvas || !img || historyIndex < 0 || !history[historyIndex]) {
-          console.warn("Cannot apply tool: missing canvas, image, or history state.");
+      // Operate directly on ImageData from history
+      if (historyIndex < 0 || !history[historyIndex] || imageDimensions.width === 0 || imageDimensions.height === 0) {
+          console.warn("Cannot apply tool: missing history state or image dimensions.");
           return;
       }
 
       // Get the current ImageData from history
       const currentImageData = history[historyIndex];
-      const data = currentImageData.data;
+      // Important: Clone the data array to avoid modifying the history state directly during the operation
+      const data = new Uint8ClampedArray(currentImageData.data);
       const width = currentImageData.width;
       //const height = currentImageData.height; // Not needed for index calculation
 
@@ -567,78 +652,84 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
            colorB = parseInt(hex.substring(4, 6), 16);
       }
 
-      // Iterate over the brush area
-      for (let y = -halfSize; y < size - halfSize; y++) {
-          for (let x = -halfSize; x < size - halfSize; x++) {
-              const pixelX = correctedX + x;
-              const pixelY = correctedY + y;
+      let modified = false; // Track if any pixel actually changed
 
-              // Bounds check
+      // Iterate over the brush area
+      for (let yOffset = -halfSize; yOffset < size - halfSize; yOffset++) {
+          for (let xOffset = -halfSize; xOffset < size - halfSize; xOffset++) {
+              const pixelX = correctedX + xOffset;
+              const pixelY = correctedY + yOffset;
+
+              // Bounds check against image dimensions
               if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < currentImageData.height) {
                   const index = (pixelY * width + pixelX) * 4; // Calculate the index in the ImageData array
 
                    if (tool === 'erase') {
-                       // Set RGBA to fully transparent (0, 0, 0, 0)
-                       data[index] = 0;     // R
-                       data[index + 1] = 0; // G
-                       data[index + 2] = 0; // B
-                       data[index + 3] = 0; // A
+                       // Set RGBA to fully transparent (0, 0, 0, 0) only if not already transparent
+                       if (data[index + 3] !== 0) {
+                           data[index] = 0;     // R
+                           data[index + 1] = 0; // G
+                           data[index + 2] = 0; // B
+                           data[index + 3] = 0; // A
+                           modified = true;
+                       }
                    } else if (tool === 'draw') {
-                       // Set RGB to drawColor and Alpha to fully opaque (255)
-                       data[index] = colorR;
-                       data[index + 1] = colorG;
-                       data[index + 2] = colorB;
-                       data[index + 3] = 255;
+                       // Set RGB to drawColor and Alpha to fully opaque (255) only if different
+                       if (data[index] !== colorR || data[index + 1] !== colorG || data[index + 2] !== colorB || data[index + 3] !== 255) {
+                           data[index] = colorR;
+                           data[index + 1] = colorG;
+                           data[index + 2] = colorB;
+                           data[index + 3] = 255;
+                           modified = true;
+                       }
                    }
               }
           }
       }
 
-      // --- IMPORTANT: Update the LATEST history entry directly with the modified ImageData ---
-      const currentHistory = [...history];
-      currentHistory[historyIndex] = new ImageData(data, width, currentImageData.height); // Create new ImageData object
-      setHistory(currentHistory); // Update state to trigger redraw via useEffect
+      // --- IMPORTANT: Update the LATEST history entry directly with the *new* modified ImageData ---
+      if (modified) {
+          const newImageData = new ImageData(data, width, currentImageData.height); // Create new ImageData object from modified data
+          // Replace the current history state
+          const currentHistory = [...history];
+          currentHistory[historyIndex] = newImageData;
+          setHistory(currentHistory); // Update state to trigger redraw via useEffect
+          //console.log("Applied tool, updated history index", historyIndex);
+      }
+
 
       // Don't call saveToHistory() here, only on mouseUp/mouseLeave
-      // Trigger a redraw immediately for responsiveness
-      requestAnimationFrame(draw);
+      // Trigger a redraw immediately for responsiveness (already happens via useEffect)
+      // requestAnimationFrame(draw);
    };
 
 
    // --- Zoom & Save ---
     const handleZoom = (factor: number) => {
          const canvas = canvasRef.current;
-         if (!canvas) return;
+         const container = containerRef.current;
+         if (!canvas || !container || imageDimensions.width === 0 || imageDimensions.height === 0) return;
 
          const newZoom = Math.max(0.1, Math.min(zoom * factor, 32)); // Clamp zoom level
 
-         // Center zoom for simplicity
-         const container = canvas.parentElement;
-         if (container) {
-             const containerWidth = container.offsetWidth;
-             const containerHeight = container.offsetHeight;
-             const imgWidth = canvas.width; // Use canvas resolution
-             const imgHeight = canvas.height;
+         // Zoom towards the center of the container view
+         const containerCenterX = container.offsetWidth / 2;
+         const containerCenterY = container.offsetHeight / 2;
 
-             // Calculate new offset to keep center point stable
-             const currentCenterX = (containerWidth / 2 - offset.x) / zoom;
-             const currentCenterY = (containerHeight / 2 - offset.y) / zoom;
+         // Get image coordinates of the center point before zoom
+         const centerCoordsBeforeZoom = getCanvasCoordinates(
+             canvas.getBoundingClientRect().left + containerCenterX,
+             canvas.getBoundingClientRect().top + containerCenterY
+         );
 
-             const newOffsetX = containerWidth / 2 - currentCenterX * newZoom;
-             const newOffsetY = containerHeight / 2 - currentCenterY * newZoom;
+         // Calculate new offset to keep the center point stable
+         const newOffsetX = containerCenterX - canvas.width / 2 - (centerCoordsBeforeZoom.x - imageDimensions.width / 2) * newZoom;
+         const newOffsetY = containerCenterY - canvas.height / 2 - (centerCoordsBeforeZoom.y - imageDimensions.height / 2) * newZoom;
 
+         setZoom(newZoom);
+         setOffset({ x: newOffsetX, y: newOffsetY });
 
-              setZoom(newZoom);
-              setOffset({ x: newOffsetX, y: newOffsetY });
-
-             // Update canvas style immediately for zoom feedback
-             canvas.style.transform = `translate(${newOffsetX}px, ${newOffsetY}px) scale(${newZoom})`;
-             canvas.style.width = `${imgWidth * newZoom}px`;
-             canvas.style.height = `${imgHeight * newZoom}px`;
-
-              // Let the main draw loop handle the final drawing at the new scale
-             requestAnimationFrame(draw);
-         }
+         // Draw is triggered by useEffect
     };
     const handleZoomIn = () => handleZoom(1.2);
     const handleZoomOut = () => handleZoom(1 / 1.2);
@@ -646,13 +737,19 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
     const handleSaveSelection = () => {
         const previewCanvas = previewCanvasRef.current;
         if (!previewCanvas || !selection || selection.width < 1 || selection.height < 1) {
-            console.warn("Cannot save: Invalid selection."); return;
+            console.warn("Cannot save: Invalid selection or preview canvas."); return;
         };
         try {
             const dataUrl = previewCanvas.toDataURL('image/png');
             onSaveSprite(selectedSpriteState, dataUrl);
             setSelection(null); // Clear selection after saving
-        } catch (e) { console.error("Error generating data URL:", e); }
+        } catch (e) {
+             console.error("Error generating data URL from preview canvas:", e);
+             if (e instanceof DOMException && e.name === 'SecurityError') {
+                 console.error("Canvas seems to be tainted, likely due to CORS issues with the source image.");
+                 // Consider showing a user-friendly error message here
+             }
+         }
     };
 
    // --- Cursor Style ---
@@ -770,7 +867,11 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
        </TooltipProvider>
 
         {/* Canvas Container - for centering and overflow */}
-        <div className="flex-grow overflow-auto relative bg-gray-400 flex items-center justify-center" style={{ cursor: getCursor() }}>
+        <div
+             ref={containerRef} // Add ref to the container
+             className="flex-grow overflow-hidden relative bg-gray-400" // Use hidden overflow
+             style={{ cursor: getCursor() }} // Apply cursor style
+        >
           <canvas
             ref={canvasRef}
             onMouseDown={handleMouseDown}
@@ -778,13 +879,13 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseLeave}
             onWheel={handleWheel} // Add wheel listener
-            className="absolute" // Use absolute positioning within the centered container
+            // className="absolute top-0 left-0" // Use absolute positioning within the container
+            className="block" // Ensure canvas takes up space
             style={{
-                imageRendering: 'pixelated',
-                touchAction: 'none', // disable browser default touch actions like scroll/zoom
-                transformOrigin: 'top left', // Ensure scaling originates correctly
-                // Width/Height and Transform are set dynamically by useEffect/Wheel/Mouse handlers
-             }}
+                imageRendering: 'pixelated', // For crisp pixel art
+                touchAction: 'none', // Disable browser default touch actions
+                // width and height are set based on container size in useEffect
+            }}
          />
        </div>
 
@@ -796,7 +897,8 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                   <Label className="text-xs mb-1 font-semibold">Preview</Label>
                   <canvas ref={previewCanvasRef} className="pixel-border bg-white max-w-[64px] max-h-[64px]"
                     style={{ imageRendering: 'pixelated' }}
-                    width={Math.max(1, Math.floor(selection.width))} height={Math.max(1, Math.floor(selection.height))} />
+                    // Width and height are set dynamically in the useEffect hook for preview
+                    />
               </div>
              <div className="flex-grow space-y-1">
                  <Label htmlFor="sprite-state-select" className="text-xs font-semibold">Assign to Pose:</Label>
@@ -823,3 +925,5 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
 };
 
 export default SpriteEditor;
+
+      
