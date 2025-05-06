@@ -107,19 +107,25 @@ export default function WorldPage() {
   // --- Callbacks & Functions --- Moved Up ---
 
   const handleGenerateWorld = useCallback(async (description: string) => {
-    if (!description) { toast({ title: "Missing Description", variant: "destructive" }); return false; }
+    if (!description) {
+        // Use setTimeout to avoid calling toast during render phase
+        setTimeout(() => toast({ title: "Missing Description", variant: "destructive" }), 0);
+        return false;
+    }
     setIsGeneratingWorld(true);
     try {
       const result = await generateWorldBackground({ description: description });
       setGeneratedWorldBackground(result.worldImageDataUri);
       setCurrentWorldDescription(description);
       if (!initialWorldDescription) setInitialWorldDescription(description);
-      toast({ title: "World Background Generated!" });
+       // Use setTimeout to avoid calling toast during render phase
+      setTimeout(() => toast({ title: "World Background Generated!" }), 0);
       return true;
     } catch (error) {
       console.error("World gen error:", error);
       const msg = `World generation failed. ${error instanceof Error ? error.message : 'Try again.'}`;
-      toast({ title: "Generation Failed", description: msg, variant: "destructive" });
+       // Use setTimeout to avoid calling toast during render phase
+      setTimeout(() => toast({ title: "Generation Failed", description: msg, variant: "destructive" }), 0);
       return false;
     } finally {
       setIsGeneratingWorld(false);
@@ -142,7 +148,11 @@ export default function WorldPage() {
    const handleInitialGenerate = () => { handleGenerateWorld(initialWorldDescription); };
 
    const handleExportGame = () => {
-    if (!spriteSlots || !generatedWorldBackground) { toast({ title: "Missing Assets", variant: "destructive" }); return; }
+    if (!spriteSlots || !generatedWorldBackground) {
+        // Use setTimeout to avoid calling toast during render phase
+        setTimeout(() => toast({ title: "Missing Assets", variant: "destructive" }), 0);
+        return;
+    }
     try {
       const gameData = { sprites: spriteSlots, worldBackground: generatedWorldBackground, initialWorldDescription: currentWorldDescription, };
       const gameDataString = JSON.stringify(gameData, null, 2);
@@ -151,9 +161,12 @@ export default function WorldPage() {
       link.href = url; link.download = 'spritecraft_game_data.json';
       document.body.appendChild(link); link.click();
       document.body.removeChild(link); URL.revokeObjectURL(url);
-      toast({ title: "Game Data Exported!" });
+       // Use setTimeout to avoid calling toast during render phase
+      setTimeout(() => toast({ title: "Game Data Exported!" }), 0);
     } catch (error) {
-      console.error("Export error:", error); toast({ title: "Export Failed", variant: "destructive" });
+      console.error("Export error:", error);
+      // Use setTimeout to avoid calling toast during render phase
+      setTimeout(() => toast({ title: "Export Failed", variant: "destructive" }), 0);
     }
   };
 
@@ -173,15 +186,24 @@ export default function WorldPage() {
           setSpriteSlots(parsedSprites);
         } else {
           const msg = `Missing sprites: ${missingStates.join(', ')}. Go back to fix.`;
-          setError(msg); console.error(msg); toast({ title: "Sprites Missing", description: msg, variant: "destructive", duration: 5000 }); router.push('/');
+          setError(msg); console.error(msg);
+          // Use setTimeout for toast
+          setTimeout(() => toast({ title: "Sprites Missing", description: msg, variant: "destructive", duration: 5000 }), 0);
+          router.push('/');
         }
       } catch (e) {
         const msg = 'Failed to parse sprite data. Go back and retry.';
-        console.error('Parse error:', e); setError(msg); toast({ title: "Data Error", description: msg, variant: "destructive", duration: 5000 }); router.push('/');
+        console.error('Parse error:', e); setError(msg);
+        // Use setTimeout for toast
+        setTimeout(() => toast({ title: "Data Error", description: msg, variant: "destructive", duration: 5000 }), 0);
+        router.push('/');
       }
     } else {
       const msg = 'No character data. Create a character first.';
-      setError(msg); console.error(msg); toast({ title: "No Data", description: msg, variant: "destructive", duration: 5000 }); router.push('/');
+      setError(msg); console.error(msg);
+      // Use setTimeout for toast
+      setTimeout(() => toast({ title: "No Data", description: msg, variant: "destructive", duration: 5000 }), 0);
+      router.push('/');
     }
     setIsLoading(false);
   }, [router, toast]);
@@ -261,7 +283,8 @@ export default function WorldPage() {
               const dist = Math.abs(charCenterX - penguinCenterX);
               if (dist < (CHARACTER_WIDTH / 2 + ITEM_WIDTH / 2) - INTERACTION_DISTANCE && y === GROUND_Y) { // Check horizontal overlap and ground proximity
                   console.log("Collected Penguin!");
-                  toast({ title: "Penguin Found!", description: "You got the key!", duration: 2000 });
+                  // Use setTimeout for toast
+                  setTimeout(() => toast({ title: "Penguin Found!", description: "You got the key!", duration: 2000 }), 0);
                   setPenguin(p => p ? { ...p, collected: true } : null);
                   setHasKey(true); // Grant the key
               }
@@ -277,7 +300,8 @@ export default function WorldPage() {
                   if (!isTransitioningRef.current && generatedWorldBackground && currentWorldDescription) {
                       isTransitioningRef.current = true;
                       console.log("Transitioning to next level...");
-                      toast({ title: "Moving to next area...", description: "Generating new background..." });
+                       // Use setTimeout for toast
+                       setTimeout(() => toast({ title: "Moving to next area...", description: "Generating new background..." }), 0);
                       const nextLevel = level + 1; // Calculate next level here
                       setLevel(nextLevel); // Increment level counter
 
@@ -302,7 +326,8 @@ export default function WorldPage() {
                    vx = 0;
                    // Optionally show a "Locked" toast, but might be annoying
                    // if (!toast.isActive('door-locked')) { // Prevent spamming
-                   //   toast({id: 'door-locked', title: "Door Locked", description: "Find the penguin to get the key!", variant: "destructive", duration: 2000 });
+                   //    // Use setTimeout for toast
+                   //   setTimeout(() => toast({id: 'door-locked', title: "Door Locked", description: "Find the penguin to get the key!", variant: "destructive", duration: 2000 }), 0);
                    // }
               }
           }
@@ -431,3 +456,4 @@ export default function WorldPage() {
     </div>
   );
 }
+
