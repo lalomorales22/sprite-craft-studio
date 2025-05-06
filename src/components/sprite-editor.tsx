@@ -48,7 +48,7 @@ interface SpriteEditorProps {
 const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spriteSlots, onImageUpdate }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null); // Still used for visual preview
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -88,7 +88,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
         ctx.scale(zoom, zoom);
         ctx.translate(-imageDimensions.width / 2, -imageDimensions.height / 2);
 
-        // Draw checkered background
+        // Draw checkered background UNDER the image
         const patternSize = 10 / zoom;
         for (let i = 0; i < imageDimensions.width; i += patternSize) {
           for (let j = 0; j < imageDimensions.height; j += patternSize) {
@@ -97,7 +97,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
           }
         }
 
-        // Draw the current state from history
+        // Draw the current state from history ON TOP of the checkered background
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = history[historyIndex].width;
         tempCanvas.height = history[historyIndex].height;
@@ -122,11 +122,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
         ctx.restore();
     } else if (isLoadingImage) {
          // Optional: Draw loading state directly on canvas if needed, though skeleton is preferred
-         // ctx.fillStyle = 'rgba(0,0,0,0.5)';
-         // ctx.fillRect(0, 0, canvas.width, canvas.height);
-         // ctx.fillStyle = 'white';
-         // ctx.textAlign = 'center';
-         // ctx.fillText("Loading Image...", canvas.width / 2, canvas.height / 2);
     } else if (!imageUrl) {
         // Draw placeholder if no image URL provided
         ctx.fillStyle = 'hsl(var(--muted-foreground))';
@@ -162,8 +157,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
      // Ensure the ImageData has the correct dimensions
      if(imageDataToSave.width !== imageDimensions.width || imageDataToSave.height !== imageDimensions.height) {
          console.warn("History save aborted: ImageData dimensions mismatch.", imageDataToSave.width, "x", imageDataToSave.height, "vs", imageDimensions.width, "x", imageDimensions.height);
-         // Optional: Try to create a new ImageData with correct dimensions and draw the mismatching one onto it?
-         // This might be complex and depends on the cause of the mismatch.
          return;
      }
 
@@ -187,7 +180,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                  }
              }
              if (same) {
-                 //console.log("Skipping save to history: state unchanged.");
                  return; // Don't save if identical to previous state
              }
          }
@@ -195,7 +187,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
          newHistory.push(imageDataToSave);
          setHistory(newHistory);
          setHistoryIndex(newHistory.length - 1);
-         //console.log("Saved to history. Index:", newHistory.length - 1);
       } catch (e) {
           console.error("Error saving to history:", e);
           if (e instanceof DOMException && e.name === 'SecurityError') {
@@ -330,7 +321,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
     }, [draw, zoom, offset, selection, historyIndex, tool]);
 
 
-   // Update preview canvas
+   // Update preview canvas - Only for VISUAL PREVIEW
    useEffect(() => {
        const previewCanvas = previewCanvasRef.current;
        const previewCtx = previewCanvas?.getContext('2d', { willReadFrequently: true });
@@ -364,6 +355,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                previewCanvas.height = clampedH;
                previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
+               // Draw checkered background for PREVIEW only
                const patternSize = 5;
                for (let i = 0; i < previewCanvas.width; i += patternSize) {
                    for (let j = 0; j < previewCanvas.height; j += patternSize) {
@@ -372,6 +364,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                    }
                }
 
+               // Draw the selected image portion OVER the preview checkered background
                previewCtx.drawImage(
                    tempCanvas,
                    clampedX, clampedY, clampedW, clampedH,
@@ -449,8 +442,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
    const handleMouseUp = () => {
        if (isLoadingImage || isRemovingBackground) return;
        if (isDrawing && (tool === 'erase' || tool === 'draw')) {
-           // Check if the state actually changed before saving
-           // This check is now implicitly handled inside saveToHistory
            saveToHistory();
        }
        if (isSelecting && tool === 'select' && selection && (selection.width < 1 || selection.height < 1)) {
@@ -568,23 +559,70 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
     const handleZoomIn = () => handleZoom(1.2);
     const handleZoomOut = () => handleZoom(1 / 1.2);
 
-    const handleSaveSelection = () => {
-        if (isLoadingImage || isRemovingBackground) return;
-        const previewCanvas = previewCanvasRef.current;
-        if (!previewCanvas || !selection || selection.width < 1 || selection.height < 1) { console.warn("Cannot save: Invalid selection or preview canvas."); return; };
-        try {
-            const dataUrl = previewCanvas.toDataURL('image/png');
-            onSaveSprite(selectedSpriteState, dataUrl);
-            setSelection(null);
-        } catch (e) {
-             console.error("Error generating data URL from preview canvas:", e);
-             if (e instanceof DOMException && e.name === 'SecurityError') {
-                 toast({ title: "CORS Error", description: "Cannot save sprite due to cross-origin issues.", variant: "destructive"});
-             } else {
-                 toast({ title: "Save Error", description: "Could not save the selected sprite.", variant: "destructive"});
-             }
-         }
-    };
+   const handleSaveSelection = () => {
+       if (isLoadingImage || isRemovingBackground || !selection || selection.width < 1 || selection.height < 1 || historyIndex < 0 || !history[historyIndex]) {
+           console.warn("Cannot save: Invalid state (loading, no selection, or no history).");
+           toast({ title: "Cannot Save", description: "Please select an area on the image first.", variant: "destructive" });
+           return;
+       }
+
+       const sourceImageData = history[historyIndex];
+       const width = Math.max(1, Math.floor(selection.width));
+       const height = Math.max(1, Math.floor(selection.height));
+       const startX = Math.max(0, Math.floor(selection.x));
+       const startY = Math.max(0, Math.floor(selection.y));
+
+       // Create a new canvas specifically for the cropped image
+       const cropCanvas = document.createElement('canvas');
+       cropCanvas.width = width;
+       cropCanvas.height = height;
+       const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true }); // Use willReadFrequently here too
+
+       if (!cropCtx) {
+           console.error("Could not get context for crop canvas.");
+           toast({ title: "Save Error", description: "Could not prepare the sprite image.", variant: "destructive" });
+           return;
+       }
+
+       cropCtx.imageSmoothingEnabled = false; // Ensure crisp pixels
+
+       try {
+           // Get the image data for the selected region from the source ImageData
+           const selectedImageData = cropCtx.createImageData(width, height);
+           const sourceData = sourceImageData.data;
+           const destData = selectedImageData.data;
+           const sourceWidth = sourceImageData.width;
+
+           for (let y = 0; y < height; y++) {
+               for (let x = 0; x < width; x++) {
+                   const sourceIndex = ((startY + y) * sourceWidth + (startX + x)) * 4;
+                   const destIndex = (y * width + x) * 4;
+
+                   // Copy RGBA values directly
+                   destData[destIndex] = sourceData[sourceIndex];     // R
+                   destData[destIndex + 1] = sourceData[sourceIndex + 1]; // G
+                   destData[destIndex + 2] = sourceData[sourceIndex + 2]; // B
+                   destData[destIndex + 3] = sourceData[sourceIndex + 3]; // A
+               }
+           }
+
+           // Put the extracted image data onto the crop canvas
+           cropCtx.putImageData(selectedImageData, 0, 0);
+
+           // Convert the crop canvas (containing only the desired pixels) to a data URL
+           const dataUrl = cropCanvas.toDataURL('image/png');
+           onSaveSprite(selectedSpriteState, dataUrl);
+           setSelection(null); // Clear selection after successful save
+
+       } catch (e) {
+           console.error("Error extracting or saving sprite data:", e);
+           if (e instanceof DOMException && e.name === 'SecurityError') {
+               toast({ title: "CORS Error", description: "Cannot save sprite due to cross-origin issues.", variant: "destructive" });
+           } else {
+               toast({ title: "Save Error", description: "Could not save the selected sprite.", variant: "destructive" });
+           }
+       }
+   };
 
     // --- Background Removal (Client-Side) ---
     const handleRemoveBackground = useCallback(async () => {
@@ -602,22 +640,20 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
             const data = new Uint8ClampedArray(currentImageData.data); // Clone data
 
             // Simple background removal: Assume top-left pixel color is background
-            // More sophisticated methods (flood fill, color distance) could be added here.
             const bgR = data[0];
             const bgG = data[1];
             const bgB = data[2];
-            const bgA = data[3]; // Consider transparent backgrounds too?
 
             const tolerance = 30; // Tolerance for color matching (adjust as needed)
 
-             // Worker would be ideal for performance, but keep it simple for now
-             await new Promise(resolve => setTimeout(resolve, 10)); // Allow UI update
+             // Allow UI update before potentially long loop
+             await new Promise(resolve => setTimeout(resolve, 10));
 
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i];
                 const g = data[i + 1];
                 const b = data[i + 2];
-                // Simple distance check (can be improved)
+
                 const distance = Math.sqrt(
                     Math.pow(r - bgR, 2) +
                     Math.pow(g - bgG, 2) +
@@ -627,11 +663,6 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
                 if (distance <= tolerance) {
                     data[i + 3] = 0; // Make transparent
                 }
-                 // Add a check for progress update if needed for long operations
-                 // if (i % (width * 100 * 4) === 0) { // Example: update every 100 rows
-                 //     await new Promise(resolve => setTimeout(resolve, 0)); // Yield to event loop
-                 //     console.log(`BG Removal Progress: ${Math.round((i / data.length) * 100)}%`);
-                 // }
             }
 
             const newImageData = new ImageData(data, width, height);
@@ -792,7 +823,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
         {/* Canvas Container */}
         <div
              ref={containerRef}
-             className="flex-grow overflow-hidden relative bg-gray-400"
+             className="flex-grow overflow-hidden relative bg-gray-400" // Changed background to see transparency more easily
              style={{ cursor: getCursor() }}
         >
          {(isLoadingImage || isRemovingBackground) && (
@@ -830,6 +861,7 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
            <div className="flex items-center gap-4 p-2 border-t pixel-border bg-muted/50">
               <div className="flex flex-col items-center">
                   <Label className="text-xs mb-1 font-semibold">Preview</Label>
+                  {/* Preview canvas shows checkered background */}
                   <canvas ref={previewCanvasRef} className="pixel-border bg-white max-w-[64px] max-h-[64px]"
                     style={{ imageRendering: 'pixelated' }}
                     />
@@ -859,3 +891,4 @@ const SpriteEditor: React.FC<SpriteEditorProps> = ({ imageUrl, onSaveSprite, spr
 };
 
 export default SpriteEditor;
+
