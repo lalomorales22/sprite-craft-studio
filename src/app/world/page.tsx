@@ -104,6 +104,59 @@ export default function WorldPage() {
   const [hasKey, setHasKey] = useState(false); // Player inventory
   const [level, setLevel] = useState(1); // Track level number
 
+  // --- Callbacks & Functions --- Moved Up ---
+
+  const handleGenerateWorld = useCallback(async (description: string) => {
+    if (!description) { toast({ title: "Missing Description", variant: "destructive" }); return false; }
+    setIsGeneratingWorld(true);
+    try {
+      const result = await generateWorldBackground({ description: description });
+      setGeneratedWorldBackground(result.worldImageDataUri);
+      setCurrentWorldDescription(description);
+      if (!initialWorldDescription) setInitialWorldDescription(description);
+      toast({ title: "World Background Generated!" });
+      return true;
+    } catch (error) {
+      console.error("World gen error:", error);
+      const msg = `World generation failed. ${error instanceof Error ? error.message : 'Try again.'}`;
+      toast({ title: "Generation Failed", description: msg, variant: "destructive" });
+      return false;
+    } finally {
+      setIsGeneratingWorld(false);
+    }
+  }, [toast, initialWorldDescription]); // Removed handleGenerateWorld from its own deps
+
+  const getCurrentSprite = useCallback(() => {
+     if (!spriteSlots) return null;
+     let stateToUse = character.state; let spriteUrl = spriteSlots[stateToUse]; let shouldMirror = false;
+      if (stateToUse === 'running') {
+          if (spriteSlots.running) { spriteUrl = spriteSlots.running; shouldMirror = character.direction === 'left'; }
+          else { spriteUrl = character.direction === 'left' ? spriteSlots.walkingLeft : spriteSlots.walkingRight; shouldMirror = false; }
+      } else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) { spriteUrl = spriteSlots.walkingLeft; shouldMirror = true; }
+      else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) { spriteUrl = spriteSlots.walkingRight; shouldMirror = true; }
+      if (!spriteUrl) { console.warn(`Sprite missing: "${stateToUse}". Fallback to "standing".`); spriteUrl = spriteSlots.standing; shouldMirror = false; }
+      if (!spriteUrl) { console.error("CRITICAL: Standing sprite missing!"); return null; }
+     return { url: spriteUrl, mirror: shouldMirror };
+   }, [character.state, character.direction, spriteSlots]);
+
+   const handleInitialGenerate = () => { handleGenerateWorld(initialWorldDescription); };
+
+   const handleExportGame = () => {
+    if (!spriteSlots || !generatedWorldBackground) { toast({ title: "Missing Assets", variant: "destructive" }); return; }
+    try {
+      const gameData = { sprites: spriteSlots, worldBackground: generatedWorldBackground, initialWorldDescription: currentWorldDescription, };
+      const gameDataString = JSON.stringify(gameData, null, 2);
+      const blob = new Blob([gameDataString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob); const link = document.createElement('a');
+      link.href = url; link.download = 'spritecraft_game_data.json';
+      document.body.appendChild(link); link.click();
+      document.body.removeChild(link); URL.revokeObjectURL(url);
+      toast({ title: "Game Data Exported!" });
+    } catch (error) {
+      console.error("Export error:", error); toast({ title: "Export Failed", variant: "destructive" });
+    }
+  };
+
   // --- Effects ---
 
   // Load sprite data
@@ -225,9 +278,11 @@ export default function WorldPage() {
                       isTransitioningRef.current = true;
                       console.log("Transitioning to next level...");
                       toast({ title: "Moving to next area...", description: "Generating new background..." });
-                      setLevel(l => l + 1); // Increment level counter
+                      const nextLevel = level + 1; // Calculate next level here
+                      setLevel(nextLevel); // Increment level counter
 
-                      handleGenerateWorld(currentWorldDescription + ` continue the ${direction} scene, level ${level + 1}`)
+                      // Pass the calculated next level to the prompt
+                      handleGenerateWorld(currentWorldDescription + ` continue the ${direction} scene, level ${nextLevel}`)
                         .then((success) => {
                             if (success) {
                                 console.log("New world generated, resetting character.");
@@ -273,59 +328,6 @@ export default function WorldPage() {
     };
   }, [spriteSlots, error, isLoading, handleGenerateWorld, currentWorldDescription, toast, penguin, hasKey, level]); // Add penguin, hasKey, level
 
-
-  // --- Callbacks & Functions ---
-
-  const handleGenerateWorld = useCallback(async (description: string) => {
-    if (!description) { toast({ title: "Missing Description", variant: "destructive" }); return false; }
-    setIsGeneratingWorld(true);
-    try {
-      const result = await generateWorldBackground({ description: description });
-      setGeneratedWorldBackground(result.worldImageDataUri);
-      setCurrentWorldDescription(description);
-      if (!initialWorldDescription) setInitialWorldDescription(description);
-      toast({ title: "World Background Generated!" });
-      return true;
-    } catch (error) {
-      console.error("World gen error:", error);
-      const msg = `World generation failed. ${error instanceof Error ? error.message : 'Try again.'}`;
-      toast({ title: "Generation Failed", description: msg, variant: "destructive" });
-      return false;
-    } finally {
-      setIsGeneratingWorld(false);
-    }
-  }, [toast, initialWorldDescription]);
-
-  const getCurrentSprite = useCallback(() => {
-     if (!spriteSlots) return null;
-     let stateToUse = character.state; let spriteUrl = spriteSlots[stateToUse]; let shouldMirror = false;
-      if (stateToUse === 'running') {
-          if (spriteSlots.running) { spriteUrl = spriteSlots.running; shouldMirror = character.direction === 'left'; }
-          else { spriteUrl = character.direction === 'left' ? spriteSlots.walkingLeft : spriteSlots.walkingRight; shouldMirror = false; }
-      } else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) { spriteUrl = spriteSlots.walkingLeft; shouldMirror = true; }
-      else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) { spriteUrl = spriteSlots.walkingRight; shouldMirror = true; }
-      if (!spriteUrl) { console.warn(`Sprite missing: "${stateToUse}". Fallback to "standing".`); spriteUrl = spriteSlots.standing; shouldMirror = false; }
-      if (!spriteUrl) { console.error("CRITICAL: Standing sprite missing!"); return null; }
-     return { url: spriteUrl, mirror: shouldMirror };
-   }, [character.state, character.direction, spriteSlots]);
-
-   const handleInitialGenerate = () => { handleGenerateWorld(initialWorldDescription); };
-
-   const handleExportGame = () => {
-    if (!spriteSlots || !generatedWorldBackground) { toast({ title: "Missing Assets", variant: "destructive" }); return; }
-    try {
-      const gameData = { sprites: spriteSlots, worldBackground: generatedWorldBackground, initialWorldDescription: currentWorldDescription, };
-      const gameDataString = JSON.stringify(gameData, null, 2);
-      const blob = new Blob([gameDataString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob); const link = document.createElement('a');
-      link.href = url; link.download = 'spritecraft_game_data.json';
-      document.body.appendChild(link); link.click();
-      document.body.removeChild(link); URL.revokeObjectURL(url);
-      toast({ title: "Game Data Exported!" });
-    } catch (error) {
-      console.error("Export error:", error); toast({ title: "Export Failed", variant: "destructive" });
-    }
-  };
 
   // --- Render Logic ---
 
