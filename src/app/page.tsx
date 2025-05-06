@@ -11,9 +11,9 @@ import {Textarea} from '@/components/ui/textarea';
 import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} from '@/components/ui/card';
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
-import {removeBackground} from '@/ai/flows/remove-background'; // Import the background removal flow
+// Removed AI background removal import: import {removeBackground} from '@/ai/flows/remove-background';
 import Image from 'next/image';
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles} from 'lucide-react'; // Added Globe, Sparkles
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles} from 'lucide-react'; // Removed Sit, added Armchair, Globe, Sparkles
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor';
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading states
@@ -29,7 +29,7 @@ export default function Home() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [generatedSpriteSheet, setGeneratedSpriteSheet] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRemovingEditorBackground, setIsRemovingEditorBackground] = useState(false); // State for editor background removal loading
+  // Removed state for AI background removal: const [isRemovingEditorBackground, setIsRemovingEditorBackground] = useState(false);
   const [editorImage, setEditorImage] = useState<string | null>(null); // Image sent to editor
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots>({
     standing: null,
@@ -85,7 +85,7 @@ export default function Home() {
       console.error('Error generating sprite sheet:', error);
       // Specific check for safety settings error from the flow
       const errorMessage = error instanceof Error ? error.message : 'Could not generate the sprite sheet. Please try again.';
-       if (errorMessage.includes('Generation failed due to safety settings')) {
+       if (errorMessage.includes('Generation blocked')) { // Check for specific Genkit error message
           toast({
             title: 'Generation Blocked',
             description: 'The image or description triggered safety filters. Please modify and try again.',
@@ -107,50 +107,7 @@ export default function Home() {
     }
   };
 
-
-   const handleRemoveEditorBackground = async () => {
-     if (!editorImage) {
-       toast({
-         title: 'No Image in Editor',
-         description: 'Please send an image to the editor first.',
-         variant: 'destructive',
-       });
-       return;
-     }
-
-     setIsRemovingEditorBackground(true);
-     const originalEditorImage = editorImage; // Store original for potential comparison
-      console.log("Removing background from editor image:", originalEditorImage.substring(0, 100) + "...");
-
-     try {
-       const result = await removeBackground({ photoDataUri: editorImage });
-        console.log("Background removal result URI:", result.imageDataUri.substring(0, 100) + "...");
-       setEditorImage(result.imageDataUri); // Update the editor image
-
-        // If the original generated sheet was the one in the editor, update it too
-       if (generatedSpriteSheet === originalEditorImage) {
-           console.log("Updating generatedSpriteSheet state with background removed image.");
-           setGeneratedSpriteSheet(result.imageDataUri);
-       }
-
-       toast({
-         title: 'Background Removed!',
-         description: 'The background has been removed from the image in the editor.',
-       });
-     } catch (error) {
-       console.error('Error removing background from editor image:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Could not remove the background. Please try again.';
-       toast({
-         title: 'Background Removal Failed',
-         description: errorMessage,
-         variant: 'destructive',
-          duration: 7000
-       });
-       // Optionally revert? No, keep the current editor image on failure.
-     } finally {
-       setIsRemovingEditorBackground(false);
-     }
-   };
+  // Removed handleRemoveEditorBackground function that used AI flow
 
 
   const handleSendToEditor = () => {
@@ -322,42 +279,21 @@ export default function Home() {
            <CardHeader>
              <div className="flex justify-between items-center">
                  <CardTitle className="flex items-center gap-2"><Paintbrush /> 2. Edit &amp; Assign Poses</CardTitle>
-                 <Button onClick={handleRemoveEditorBackground} variant="secondary" className="btn-pixel-secondary h-8 px-3 text-xs" disabled={!editorImage || isRemovingEditorBackground || isLoading}>
-                     {isRemovingEditorBackground ? (
-                         <>
-                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                         </svg>
-                         Removing BG...
-                         </>
-                     ) : (
-                         <>
-                         <Sparkles size={14} className="mr-1"/>
-                         Remove BG
-                         </>
-                     )}
-                 </Button>
+                 {/* Remove BG button moved to SpriteEditor Toolbar */}
              </div>
-             <CardDescription>Select parts of your sheet and save them for each character pose.</CardDescription>
+             <CardDescription>Select parts of your sheet, optionally remove the background, and save them for each character pose.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
               {/* Editor Canvas Area */}
               <div className="flex-grow relative pixel-border bg-white min-h-[300px] md:min-h-0">
-                 {isRemovingEditorBackground && (
-                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10">
-                      <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                       </svg>
-                   </div>
-                 )}
+                 {/* Loading overlay removed - handled within SpriteEditor now */}
                 {editorImage ? (
                   <SpriteEditor
                      imageUrl={editorImage}
                      onSaveSprite={handleSaveSprite}
                      spriteSlots={spriteSlots}
-                     key={editorImage} // Force re-render when image changes (e.g., after BG removal)
+                     key={editorImage} // Force re-render when image changes
+                     onImageUpdate={setEditorImage} // Pass update handler
                   />
                  ) : (
                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground p-4 text-center">
@@ -403,7 +339,7 @@ export default function Home() {
            <CardFooter className="justify-end">
               <Button
                 onClick={handleEnterWorld}
-                disabled={!allSlotsFilled || isLoading || isRemovingEditorBackground}
+                disabled={!allSlotsFilled || isLoading} // Removed isRemovingEditorBackground check
                 className="btn-pixel-accent"
                 aria-disabled={!allSlotsFilled}
               >
