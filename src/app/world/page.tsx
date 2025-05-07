@@ -2,16 +2,17 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Download, Image as ImageIcon, Sparkles, ArrowRight, Key } from 'lucide-react'; // Removed PenguinIcon, added Key
+import { ArrowLeft, Save, Image as ImageIcon, Sparkles, ArrowRight, Key, Library } from 'lucide-react';
 import { generateWorldBackground } from '@/ai/flows/generate-world-background';
 import type { SpriteState, SpriteSlots } from '@/app/page';
+import { saveGame as saveGameToStorage, getSavedGame } from '@/lib/game-storage';
 
 // --- Constants ---
 const GRAVITY = 0.5;
@@ -22,13 +23,13 @@ const GROUND_Y = 300;
 const WORLD_WIDTH = 800;
 const WORLD_HEIGHT = 400;
 const CHARACTER_WIDTH = 64;
-const CHARACTER_HEIGHT = 64; // Add character height
-const ITEM_WIDTH = 32; // Penguin/Key size
+const CHARACTER_HEIGHT = 64;
+const ITEM_WIDTH = 32;
 const ITEM_HEIGHT = 32;
 const DOOR_WIDTH = 50;
 const DOOR_HEIGHT = 80;
-const TRANSITION_THRESHOLD = WORLD_WIDTH - CHARACTER_WIDTH - DOOR_WIDTH; // Point where transition starts (before door)
-const INTERACTION_DISTANCE = 20; // How close character needs to be to interact
+const TRANSITION_THRESHOLD = WORLD_WIDTH - CHARACTER_WIDTH - DOOR_WIDTH;
+const INTERACTION_DISTANCE = 20;
 
 // --- Inline Penguin SVG ---
 const PenguinIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -50,7 +51,7 @@ const Door = React.memo(({ locked }: { locked: boolean }) => (
     {locked ? (
       <Key size={24} className="text-red-500" />
     ) : (
-      <div className="w-4 h-8 bg-green-500 rounded" /> // Simple unlocked indicator
+      <div className="w-4 h-8 bg-green-500 rounded" /> 
     )}
   </div>
 ));
@@ -58,31 +59,22 @@ Door.displayName = 'Door';
 
 // --- Interfaces ---
 interface CharacterState {
-  x: number;
-  y: number;
-  vx: number; // Velocity x
-  vy: number; // Velocity y
-  state: SpriteState;
-  isJumping: boolean;
-  isRunning: boolean;
-  isCrouching: boolean;
-  isSitting: boolean;
-  direction: 'left' | 'right';
+  x: number; y: number; vx: number; vy: number; state: SpriteState;
+  isJumping: boolean; isRunning: boolean; isCrouching: boolean;
+  isSitting: boolean; direction: 'left' | 'right';
 }
-
-interface CollectibleState {
-  x: number;
-  y: number;
-  collected: boolean;
-}
+interface CollectibleState { x: number; y: number; collected: boolean; }
 
 // --- World Page Component ---
 export default function WorldPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
   const characterRef = useRef<HTMLDivElement>(null);
   const keysPressed = useRef<Record<string, boolean>>({});
   const gameLoopIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -91,91 +83,104 @@ export default function WorldPage() {
   const [initialWorldDescription, setInitialWorldDescription] = useState('');
   const [currentWorldDescription, setCurrentWorldDescription] = useState('');
   const [generatedWorldBackground, setGeneratedWorldBackground] = useState<string | null>(null);
+  const [firstGeneratedBackground, setFirstGeneratedBackground] = useState<string | null>(null); // Store the very first background
   const [isGeneratingWorld, setIsGeneratingWorld] = useState(false);
+  const [gameName, setGameName] = useState(''); // For saving game
 
   // --- Game State ---
   const [character, setCharacter] = useState<CharacterState>({
-    x: WORLD_WIDTH / 2,
-    y: GROUND_Y,
-    vx: 0, vy: 0, state: 'standing', isJumping: false, isRunning: false,
-    isCrouching: false, isSitting: false, direction: 'right',
+    x: WORLD_WIDTH / 2, y: GROUND_Y, vx: 0, vy: 0, state: 'standing',
+    isJumping: false, isRunning: false, isCrouching: false, isSitting: false, direction: 'right',
   });
   const [penguin, setPenguin] = useState<CollectibleState | null>(null);
-  const [hasKey, setHasKey] = useState(false); // Player inventory
-  const [level, setLevel] = useState(1); // Track level number
+  const [hasKey, setHasKey] = useState(false);
+  const [level, setLevel] = useState(1);
 
-  // --- Callbacks & Functions --- Moved Up ---
-
-  const handleGenerateWorld = useCallback(async (description: string) => {
+  const handleGenerateWorld = useCallback(async (description: string, isInitialGeneration: boolean) => {
     if (!description) {
-        // Use setTimeout to avoid calling toast during render phase
-        setTimeout(() => toast({ title: "Missing Description", variant: "destructive" }), 0);
-        return false;
+      setTimeout(() => toast({ title: "Missing Description", variant: "destructive" }), 0);
+      return false;
     }
     setIsGeneratingWorld(true);
     try {
       const result = await generateWorldBackground({ description: description });
       setGeneratedWorldBackground(result.worldImageDataUri);
       setCurrentWorldDescription(description);
-      if (!initialWorldDescription) setInitialWorldDescription(description);
-       // Use setTimeout to avoid calling toast during render phase
+      if (isInitialGeneration) {
+        setInitialWorldDescription(description);
+        setFirstGeneratedBackground(result.worldImageDataUri); // Save the first background
+        setGameName(description.substring(0, 50)); // Default game name
+      }
       setTimeout(() => toast({ title: "World Background Generated!" }), 0);
       return true;
     } catch (error) {
       console.error("World gen error:", error);
       const msg = `World generation failed. ${error instanceof Error ? error.message : 'Try again.'}`;
-       // Use setTimeout to avoid calling toast during render phase
       setTimeout(() => toast({ title: "Generation Failed", description: msg, variant: "destructive" }), 0);
       return false;
     } finally {
       setIsGeneratingWorld(false);
     }
-  }, [toast, initialWorldDescription]); // Removed handleGenerateWorld from its own deps
+  }, [toast]);
 
   const getCurrentSprite = useCallback(() => {
-     if (!spriteSlots) return null;
-     let stateToUse = character.state; let spriteUrl = spriteSlots[stateToUse]; let shouldMirror = false;
-      if (stateToUse === 'running') {
-          if (spriteSlots.running) { spriteUrl = spriteSlots.running; shouldMirror = character.direction === 'left'; }
-          else { spriteUrl = character.direction === 'left' ? spriteSlots.walkingLeft : spriteSlots.walkingRight; shouldMirror = false; }
-      } else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) { spriteUrl = spriteSlots.walkingLeft; shouldMirror = true; }
-      else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) { spriteUrl = spriteSlots.walkingRight; shouldMirror = true; }
-      if (!spriteUrl) { console.warn(`Sprite missing: "${stateToUse}". Fallback to "standing".`); spriteUrl = spriteSlots.standing; shouldMirror = false; }
-      if (!spriteUrl) { console.error("CRITICAL: Standing sprite missing!"); return null; }
-     return { url: spriteUrl, mirror: shouldMirror };
-   }, [character.state, character.direction, spriteSlots]);
+    if (!spriteSlots) return null;
+    let stateToUse = character.state; let spriteUrl = spriteSlots[stateToUse]; let shouldMirror = false;
+    if (stateToUse === 'running') {
+      if (spriteSlots.running) { spriteUrl = spriteSlots.running; shouldMirror = character.direction === 'left'; }
+      else { spriteUrl = character.direction === 'left' ? spriteSlots.walkingLeft : spriteSlots.walkingRight; shouldMirror = false; }
+    } else if (stateToUse === 'walkingRight' && !spriteSlots.walkingRight && spriteSlots.walkingLeft) { spriteUrl = spriteSlots.walkingLeft; shouldMirror = true; }
+    else if (stateToUse === 'walkingLeft' && !spriteSlots.walkingLeft && spriteSlots.walkingRight) { spriteUrl = spriteSlots.walkingRight; shouldMirror = true; }
+    if (!spriteUrl) { console.warn(`Sprite missing: "${stateToUse}". Fallback to "standing".`); spriteUrl = spriteSlots.standing; shouldMirror = false; }
+    if (!spriteUrl) { console.error("CRITICAL: Standing sprite missing!"); return null; }
+    return { url: spriteUrl, mirror: shouldMirror };
+  }, [character.state, character.direction, spriteSlots]);
 
-   const handleInitialGenerate = () => { handleGenerateWorld(initialWorldDescription); };
+  const handleInitialGenerate = () => { handleGenerateWorld(initialWorldDescription, true); };
 
-   const handleExportGame = () => {
-    if (!spriteSlots || !generatedWorldBackground) {
-        // Use setTimeout to avoid calling toast during render phase
-        setTimeout(() => toast({ title: "Missing Assets", variant: "destructive" }), 0);
-        return;
+  const handleSaveGame = () => {
+    if (!spriteSlots || !firstGeneratedBackground || !initialWorldDescription) {
+      setTimeout(() => toast({ title: "Cannot Save", description: "Character and initial world must be set.", variant: "destructive" }), 0);
+      return;
     }
-    try {
-      const gameData = { sprites: spriteSlots, worldBackground: generatedWorldBackground, initialWorldDescription: currentWorldDescription, };
-      const gameDataString = JSON.stringify(gameData, null, 2);
-      const blob = new Blob([gameDataString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob); const link = document.createElement('a');
-      link.href = url; link.download = 'spritecraft_game_data.json';
-      document.body.appendChild(link); link.click();
-      document.body.removeChild(link); URL.revokeObjectURL(url);
-       // Use setTimeout to avoid calling toast during render phase
-      setTimeout(() => toast({ title: "Game Data Exported!" }), 0);
-    } catch (error) {
-      console.error("Export error:", error);
-      // Use setTimeout to avoid calling toast during render phase
-      setTimeout(() => toast({ title: "Export Failed", variant: "destructive" }), 0);
+    const finalGameName = gameName.trim() || initialWorldDescription.substring(0,50) || `My Game ${new Date().toLocaleTimeString()}`;
+    const saved = saveGameToStorage(finalGameName, spriteSlots, firstGeneratedBackground, initialWorldDescription);
+    if (saved) {
+      setTimeout(() => toast({ title: "Game Saved!", description: `"${saved.name}" has been saved to your browser.` }), 0);
     }
+    // No automatic redirect, user can continue playing or navigate manually
   };
 
-  // --- Effects ---
-
-  // Load sprite data
+  // Load sprite data and potentially game data
   useEffect(() => {
     setIsLoading(true);
     setError(null);
+    const loadGameId = searchParams.get('loadGameId');
+
+    if (loadGameId) {
+      console.log("Attempting to load game with ID:", loadGameId);
+      const gameToLoad = getSavedGame(loadGameId);
+      if (gameToLoad) {
+        setSpriteSlots(gameToLoad.spriteSlots);
+        setGeneratedWorldBackground(gameToLoad.worldBackgroundDataUri);
+        setFirstGeneratedBackground(gameToLoad.worldBackgroundDataUri);
+        setInitialWorldDescription(gameToLoad.initialWorldDescription);
+        setCurrentWorldDescription(gameToLoad.initialWorldDescription);
+        setGameName(gameToLoad.name);
+        setCharacter(prev => ({ ...prev, x: WORLD_WIDTH / 2, y: GROUND_Y })); // Reset character position
+        setLevel(1); // Reset level for loaded game
+        setHasKey(false); // Reset key
+        setIsLoading(false);
+        setTimeout(() => toast({ title: "Game Loaded", description: `Playing "${gameToLoad.name}"` }), 0);
+        return; // Exit early after loading game
+      } else {
+        setError(`Could not find saved game with ID: ${loadGameId}. Starting new game.`);
+        setTimeout(() => toast({ title: "Load Error", description: `Game ID ${loadGameId} not found.`, variant: "destructive" }), 0);
+        // Fall through to load sprites from session storage for a new game
+      }
+    }
+    
+    // If not loading a game, try loading sprites for a new game
     const spritesParam = sessionStorage.getItem('spriteData');
     if (spritesParam) {
       try {
@@ -185,30 +190,23 @@ export default function WorldPage() {
         if (missingStates.length === 0) {
           setSpriteSlots(parsedSprites);
         } else {
-          const msg = `Missing sprites: ${missingStates.join(', ')}. Go back to fix.`;
-          setError(msg); console.error(msg);
-          // Use setTimeout for toast
+          const msg = `Missing sprites: ${missingStates.join(', ')}. Go back to fix.`; setError(msg);
           setTimeout(() => toast({ title: "Sprites Missing", description: msg, variant: "destructive", duration: 5000 }), 0);
           router.push('/');
         }
       } catch (e) {
-        const msg = 'Failed to parse sprite data. Go back and retry.';
-        console.error('Parse error:', e); setError(msg);
-        // Use setTimeout for toast
+        const msg = 'Failed to parse sprite data. Go back and retry.'; console.error('Parse error:', e); setError(msg);
         setTimeout(() => toast({ title: "Data Error", description: msg, variant: "destructive", duration: 5000 }), 0);
         router.push('/');
       }
     } else {
-      const msg = 'No character data. Create a character first.';
-      setError(msg); console.error(msg);
-      // Use setTimeout for toast
+      const msg = 'No character data. Create a character first.'; setError(msg);
       setTimeout(() => toast({ title: "No Data", description: msg, variant: "destructive", duration: 5000 }), 0);
       router.push('/');
     }
     setIsLoading(false);
-  }, [router, toast]);
+  }, [router, toast, searchParams]);
 
-  // Keyboard listeners
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -228,21 +226,18 @@ export default function WorldPage() {
     };
   }, []);
 
-  // Place penguin on new level/background generation
   useEffect(() => {
      if (generatedWorldBackground) {
-        // Place penguin randomly, but not too close to edges or door
         const safePadding = 50;
         const randomX = Math.floor(Math.random() * (WORLD_WIDTH - ITEM_WIDTH - safePadding * 2 - DOOR_WIDTH)) + safePadding;
         setPenguin({ x: randomX, y: GROUND_Y, collected: false });
-        setHasKey(false); // Reset key inventory for new level
+        setHasKey(false);
         console.log(`Level ${level}: Penguin placed at x=${randomX}`);
      } else {
-        setPenguin(null); // Clear penguin if no background
+        setPenguin(null);
      }
-  }, [generatedWorldBackground, level]); // Depend on background and level
+  }, [generatedWorldBackground, level]);
 
-  // Game loop
   useEffect(() => {
     if (!spriteSlots || error || isLoading) {
       if (gameLoopIntervalRef.current) { clearInterval(gameLoopIntervalRef.current); gameLoopIntervalRef.current = null; }
@@ -255,12 +250,8 @@ export default function WorldPage() {
 
         setCharacter(prev => {
           let { x, y, vx, vy, state, isJumping, isRunning, isCrouching, isSitting, direction } = prev;
-
-          // Vertical Movement (Gravity & Jumping)
           vy += GRAVITY; y += vy;
           if (y >= GROUND_Y) { y = GROUND_Y; vy = 0; isJumping = false; }
-
-          // Horizontal Movement & State Logic
           isRunning = keysPressed.current['shift'] === true;
           const currentSpeed = isRunning ? RUN_SPEED : MOVE_SPEED;
           if (isSitting && y !== GROUND_Y) isSitting = false;
@@ -276,64 +267,43 @@ export default function WorldPage() {
           }
           x += vx;
 
-          // --- Penguin Interaction ---
           if (penguin && !penguin.collected) {
               const charCenterX = x + CHARACTER_WIDTH / 2;
               const penguinCenterX = penguin.x + ITEM_WIDTH / 2;
               const dist = Math.abs(charCenterX - penguinCenterX);
-              if (dist < (CHARACTER_WIDTH / 2 + ITEM_WIDTH / 2) - INTERACTION_DISTANCE && y === GROUND_Y) { // Check horizontal overlap and ground proximity
-                  console.log("Collected Penguin!");
-                  // Use setTimeout for toast
+              if (dist < (CHARACTER_WIDTH / 2 + ITEM_WIDTH / 2) - INTERACTION_DISTANCE && y === GROUND_Y) {
                   setTimeout(() => toast({ title: "Penguin Found!", description: "You got the key!", duration: 2000 }), 0);
                   setPenguin(p => p ? { ...p, collected: true } : null);
-                  setHasKey(true); // Grant the key
+                  setHasKey(true);
               }
           }
 
-          // --- World Boundaries & Transitions ---
           if (x < 0) { x = 0; vx = 0; }
           else if (x > TRANSITION_THRESHOLD) {
-              // Near the door
               if (hasKey) {
-                  // Door is unlocked, allow transition
-                  x = TRANSITION_THRESHOLD; vx = 0; // Stop at threshold
+                  x = TRANSITION_THRESHOLD; vx = 0; 
                   if (!isTransitioningRef.current && generatedWorldBackground && currentWorldDescription) {
                       isTransitioningRef.current = true;
-                      console.log("Transitioning to next level...");
-                       // Use setTimeout for toast
-                       setTimeout(() => toast({ title: "Moving to next area...", description: "Generating new background..." }), 0);
-                      const nextLevel = level + 1; // Calculate next level here
-                      setLevel(nextLevel); // Increment level counter
-
-                      // Pass the calculated next level to the prompt
-                      handleGenerateWorld(currentWorldDescription + ` continue the ${direction} scene, level ${nextLevel}`)
+                      setTimeout(() => toast({ title: "Moving to next area...", description: "Generating new background..." }), 0);
+                      const nextLevel = level + 1; 
+                      setLevel(nextLevel);
+                      handleGenerateWorld(currentWorldDescription + ` continue the ${direction} scene, level ${nextLevel}`, false)
                         .then((success) => {
                             if (success) {
-                                console.log("New world generated, resetting character.");
                                 setCharacter(prevChar => ({
                                     ...prevChar, x: 10, y: GROUND_Y, vx: 0, vy: 0, isJumping: false, state: 'standing'
                                 }));
                             } else {
-                                console.error("Failed to generate next level background.");
-                                setCharacter(prevChar => ({ ...prevChar, x: TRANSITION_THRESHOLD - 1 })); // Move back slightly
+                                setCharacter(prevChar => ({ ...prevChar, x: TRANSITION_THRESHOLD - 1 }));
                             }
                         })
                         .finally(() => { isTransitioningRef.current = false; });
                   }
               } else {
-                   // Door is locked, stop character
-                   x = TRANSITION_THRESHOLD;
-                   vx = 0;
-                   // Optionally show a "Locked" toast, but might be annoying
-                   // if (!toast.isActive('door-locked')) { // Prevent spamming
-                   //    // Use setTimeout for toast
-                   //   setTimeout(() => toast({id: 'door-locked', title: "Door Locked", description: "Find the penguin to get the key!", variant: "destructive", duration: 2000 }), 0);
-                   // }
+                   x = TRANSITION_THRESHOLD; vx = 0;
               }
           }
 
-
-          // Determine final animation state
           if (isSitting) state = 'sitting';
           else if (isJumping) state = 'jumping';
           else if (isCrouching) state = 'crouching';
@@ -346,15 +316,12 @@ export default function WorldPage() {
         });
       }, 1000 / 60);
     }
-
     return () => {
       if (gameLoopIntervalRef.current) { clearInterval(gameLoopIntervalRef.current); gameLoopIntervalRef.current = null; }
       isTransitioningRef.current = false;
     };
-  }, [spriteSlots, error, isLoading, handleGenerateWorld, currentWorldDescription, toast, penguin, hasKey, level]); // Add penguin, hasKey, level
+  }, [spriteSlots, error, isLoading, handleGenerateWorld, currentWorldDescription, toast, penguin, hasKey, level]);
 
-
-  // --- Render Logic ---
 
   if (isLoading) return <div className="flex items-center justify-center h-screen"><p>Loading World...</p></div>;
    if (error && !spriteSlots && !isLoading) {
@@ -372,11 +339,16 @@ export default function WorldPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-800 p-4 relative">
-        <Link href="/" className="absolute top-4 left-4 z-30">
-          <Button className="btn-pixel-secondary"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-        </Link>
+        <div className="absolute top-4 left-4 z-30 flex gap-2">
+          <Link href="/" >
+            <Button className="btn-pixel-secondary"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Creator</Button>
+          </Link>
+          <Link href="/created-games" >
+            <Button className="btn-pixel-secondary"><Library className="mr-2 h-4 w-4" /> View Saved Games</Button>
+          </Link>
+        </div>
 
-        {/* World Generation Controls (Initial) */}
+
        {!generatedWorldBackground && (
             <div className="mb-4 p-4 pixel-border bg-card text-card-foreground w-full max-w-3xl flex flex-col sm:flex-row gap-2 items-center z-20">
                 <Label htmlFor="world-description" className="flex-shrink-0 mr-2 font-semibold">World Prompt:</Label>
@@ -388,36 +360,29 @@ export default function WorldPage() {
             </div>
        )}
 
-      {/* Game Area */}
       <div className="relative border-4 border-black overflow-hidden" style={{ width: `${WORLD_WIDTH}px`, height: `${WORLD_HEIGHT}px`, imageRendering: 'pixelated', backgroundColor: 'hsl(var(--background))' }}
         data-ai-hint="simple pixel game background ground grass sky">
-         {/* Background */}
          {generatedWorldBackground ? (
               <Image src={generatedWorldBackground} alt="Generated World Background" layout="fill" objectFit="cover" style={{ imageRendering: 'pixelated', zIndex: 0 }} unoptimized priority />
-          ) : ( <> {/* Fallback BG */}
+          ) : ( <> 
                  <div className="absolute inset-0 bg-blue-300 z-0"></div>
                  <div className="absolute bottom-0 left-0 w-full bg-yellow-800 border-t-4 border-black z-0" style={{ height: `${WORLD_HEIGHT - GROUND_Y}px` }}/>
              </> )}
 
-        {/* Door */}
         {generatedWorldBackground && <Door locked={!hasKey} />}
 
-        {/* Penguin */}
         {penguin && !penguin.collected && generatedWorldBackground && (
            <div className="absolute z-10" style={{ left: `${penguin.x}px`, bottom: `${WORLD_HEIGHT - penguin.y - ITEM_HEIGHT}px`, width: `${ITEM_WIDTH}px`, height: `${ITEM_HEIGHT}px` }}>
                 <PenguinIcon className="w-full h-full text-black bg-white rounded p-1 pixel-border" />
            </div>
         )}
 
-        {/* Key Indicator in UI (Top Right) */}
         {generatedWorldBackground && (
             <div className={`absolute top-14 right-2 z-20 p-1 pixel-border ${hasKey ? 'bg-green-300 pixel-border-primary' : 'bg-red-300 pixel-border'}`}>
                 <Key size={20} className={hasKey ? 'text-green-800' : 'text-red-800'} />
             </div>
         )}
 
-
-        {/* Character */}
         {currentSpriteData?.url && (
            <div ref={characterRef} className="absolute z-10" style={{
               left: `${character.x}px`, bottom: `${WORLD_HEIGHT - character.y - CHARACTER_HEIGHT}px`,
@@ -428,7 +393,6 @@ export default function WorldPage() {
           </div>
         )}
 
-         {/* Instructions */}
          <div className="absolute top-2 right-2 bg-black/70 text-white p-2 text-xs pixel-border z-20 leading-tight">
             <p className='font-bold mb-1'>Level: {level} | Controls:</p>
             <p>←/A | →/D: Move | Shift: Run</p>
@@ -437,7 +401,6 @@ export default function WorldPage() {
             <p className="mt-1">Goal: Find Penguin (<PenguinIcon size={10} className="inline-block -mt-1"/>) to get key (<Key size={10} className="inline-block -mt-1"/>) &amp; exit right.</p>
          </div>
 
-         {/* Loading Indicator during transitions */}
          {isGeneratingWorld && isTransitioningRef.current && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
                    <div className="text-white text-xl flex items-center gap-2">
@@ -447,13 +410,19 @@ export default function WorldPage() {
          )}
       </div>
 
-       {/* Export Button */}
-        <div className="mt-4 z-20">
-          <Button onClick={handleExportGame} disabled={!spriteSlots || !generatedWorldBackground} className="btn-pixel-accent" aria-disabled={!spriteSlots || !generatedWorldBackground}>
-            <Download size={16} className="mr-2" /> Export Game Data
+        <div className="mt-4 z-20 flex flex-col sm:flex-row gap-2 items-center">
+          <Input 
+            type="text" 
+            placeholder="Game Name (optional)" 
+            value={gameName} 
+            onChange={(e) => setGameName(e.target.value)}
+            className="input-pixel sm:w-auto flex-grow"
+            disabled={!firstGeneratedBackground}
+          />
+          <Button onClick={handleSaveGame} disabled={!spriteSlots || !firstGeneratedBackground || !initialWorldDescription} className="btn-pixel-accent w-full sm:w-auto">
+            <Save size={16} className="mr-2" /> Save Game to Browser
           </Button>
         </div>
     </div>
   );
 }
-

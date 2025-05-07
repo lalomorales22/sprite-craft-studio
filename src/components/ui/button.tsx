@@ -10,21 +10,22 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "btn-pixel", // Use pixel class for default
+        default: "btn-pixel", 
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md", // Keep default destructive style for now
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md", 
         outline:
           "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md",
-        secondary: "btn-pixel-secondary", // Use pixel class for secondary
+        secondary: "btn-pixel-secondary", 
         ghost: "hover:bg-accent hover:text-accent-foreground rounded-md",
         link: "text-primary underline-offset-4 hover:underline",
-        accent: "btn-pixel-accent", // Add accent pixel variant
+        accent: "btn-pixel-accent", 
+        primary: "btn-pixel", // Added primary pixel variant, same as default
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 px-3 text-xs", // Adjusted for pixel maybe
+        sm: "h-9 px-3 text-xs", 
         lg: "h-11 px-8",
-        icon: "h-10 w-10 rounded-md", // Icons might not need pixel border
+        icon: "h-10 w-10 rounded-md", 
       },
     },
     defaultVariants: {
@@ -43,15 +44,13 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
-     // Determine if the variant uses a pixel class
-    const isPixelVariant = ["default", "secondary", "accent"].includes(variant || "default");
+    const isPixelVariant = ["default", "secondary", "accent", "primary"].includes(variant || "default");
 
     return (
       <Comp
-        // Apply base variants, conditionally remove rounded-md if pixel variant
         className={cn(
             buttonVariants({ variant, size, className }),
-            isPixelVariant ? "rounded-none" : "rounded-md" // Ensure non-pixel have rounding, pixel variants don't override
+            isPixelVariant ? "rounded-none" : "rounded-md" 
             )}
         ref={ref}
         {...props}
@@ -62,5 +61,3 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
-
-      

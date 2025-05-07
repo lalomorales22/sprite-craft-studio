@@ -11,12 +11,11 @@ import {Textarea} from '@/components/ui/textarea';
 import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} from '@/components/ui/card';
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
-// Removed AI background removal import: import {removeBackground} from '@/ai/flows/remove-background';
 import Image from 'next/image';
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles} from 'lucide-react'; // Removed Sit, added Armchair, Globe, Sparkles
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles, Library} from 'lucide-react';
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading states
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Define types for sprite states
 type SpriteState = 'standing' | 'walkingLeft' | 'walkingRight' | 'running' | 'jumping' | 'crouching' | 'sitting';
@@ -29,8 +28,7 @@ export default function Home() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [generatedSpriteSheet, setGeneratedSpriteSheet] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  // Removed state for AI background removal: const [isRemovingEditorBackground, setIsRemovingEditorBackground] = useState(false);
-  const [editorImage, setEditorImage] = useState<string | null>(null); // Image sent to editor
+  const [editorImage, setEditorImage] = useState<string | null>(null);
   const [spriteSlots, setSpriteSlots] = useState<SpriteSlots>({
     standing: null,
     walkingLeft: null,
@@ -49,9 +47,6 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadedImage(reader.result as string);
-        // Optionally clear other states if a new image is uploaded
-        // setGeneratedSpriteSheet(null);
-        // setEditorImage(null);
       };
       reader.readAsDataURL(file);
     }
@@ -68,14 +63,14 @@ export default function Home() {
     }
 
     setIsLoading(true);
-    setGeneratedSpriteSheet(null); // Clear previous generation
-    setEditorImage(null); // Clear editor if generating new
+    setGeneratedSpriteSheet(null); 
+    setEditorImage(null); 
     try {
       const result = await generateSpriteSheet({
         photoDataUri: uploadedImage,
         description: description,
       });
-      console.log("Generated Sprite Sheet URI:", result.spriteSheetDataUri.substring(0, 100) + "..."); // Log generated URI
+      console.log("Generated Sprite Sheet URI:", result.spriteSheetDataUri.substring(0, 100) + "..."); 
       setGeneratedSpriteSheet(result.spriteSheetDataUri);
       toast({
         title: 'Sprite Sheet Generated!',
@@ -83,21 +78,20 @@ export default function Home() {
       });
     } catch (error) {
       console.error('Error generating sprite sheet:', error);
-      // Specific check for safety settings error from the flow
       const errorMessage = error instanceof Error ? error.message : 'Could not generate the sprite sheet. Please try again.';
-       if (errorMessage.includes('Generation blocked')) { // Check for specific Genkit error message
+       if (errorMessage.includes('Generation blocked')) { 
           toast({
             title: 'Generation Blocked',
             description: 'The image or description triggered safety filters. Please modify and try again.',
             variant: 'destructive',
-            duration: 7000 // Show longer for safety errors
+            duration: 7000 
           });
        } else {
          toast({
             title: 'Generation Failed',
             description: errorMessage,
             variant: 'destructive',
-            duration: 7000 // Show longer for other errors too
+            duration: 7000 
          });
        }
       setGeneratedSpriteSheet(null);
@@ -106,9 +100,6 @@ export default function Home() {
       setIsLoading(false);
     }
   };
-
-  // Removed handleRemoveEditorBackground function that used AI flow
-
 
   const handleSendToEditor = () => {
     if (generatedSpriteSheet) {
@@ -138,10 +129,11 @@ export default function Home() {
           const spriteDataString = JSON.stringify(spriteSlots);
           sessionStorage.setItem('spriteData', spriteDataString);
           console.log("Sprite data saved to sessionStorage:", spriteDataString.substring(0, 100) + "...");
+          // Clear any game loading state before navigating to world for new character
+          sessionStorage.removeItem('loadGameId'); 
           router.push('/world');
         } catch (error) {
            console.error("Error saving to sessionStorage or navigating:", error);
-           // Check for QuotaExceededError
             if (error instanceof DOMException && error.name === 'QuotaExceededError') {
                  toast({ title: "Storage Error", description: "Could not save character data due to storage limits. Try clearing browser data.", variant: "destructive", duration: 7000 });
             } else {
@@ -166,7 +158,7 @@ export default function Home() {
         <SidebarContent>
           <SidebarMenu>
             <SidebarMenuItem>
-               <SidebarMenuButton isActive={true} tooltip="Sprite Creator">
+               <SidebarMenuButton isActive={router.pathname === '/'} tooltip="Sprite Creator">
                  <Paintbrush />
                  <span>Sprite Creator</span>
                </SidebarMenuButton>
@@ -174,24 +166,24 @@ export default function Home() {
              <SidebarMenuItem>
                <Link href="/world" passHref legacyBehavior>
                  <SidebarMenuButton
+                    isActive={router.pathname === '/world'}
                     tooltip="Game World Preview"
                     onClick={(e) => {
-                         // Prevent navigation if validation fails, show toast instead
                          const allFilled = Object.values(spriteSlots).every(slot => slot !== null);
                          if (!allFilled) {
                             e.preventDefault();
-                            toast({ title: "Missing Poses", description: "Assign all poses on the Creator page first.", variant: "destructive" });
+                            toast({ title: "Missing Poses", description: "Assign all poses on the Creator page first to preview.", variant: "destructive" });
                          } else {
                              try {
                                  sessionStorage.setItem('spriteData', JSON.stringify(spriteSlots));
-                                 // Allow navigation to proceed
+                                 sessionStorage.removeItem('loadGameId'); // Ensure we're not trying to load a game
                              } catch (error) {
-                                  e.preventDefault(); // Prevent navigation on error
+                                  e.preventDefault(); 
                                   console.error("Error saving to sessionStorage before navigation:", error);
                                    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-                                         toast({ title: "Storage Error", description: "Could not save character data before entering world due to storage limits.", variant: "destructive", duration: 7000 });
+                                         toast({ title: "Storage Error", description: "Could not save character data due to storage limits.", variant: "destructive", duration: 7000 });
                                     } else {
-                                         toast({ title: "Storage Error", description: "Could not save character data before entering world.", variant: "destructive" });
+                                         toast({ title: "Storage Error", description: "Could not save character data.", variant: "destructive" });
                                     }
                              }
                          }
@@ -202,14 +194,21 @@ export default function Home() {
                  </SidebarMenuButton>
                </Link>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+               <Link href="/created-games" passHref legacyBehavior>
+                 <SidebarMenuButton isActive={router.pathname === '/created-games'} tooltip="Created Games">
+                   <Library size={16}/>
+                   <span>Created Games</span>
+                 </SidebarMenuButton>
+               </Link>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
          <SidebarFooter className="p-4">
-           <p className="text-xs text-muted-foreground">&copy; 2024 SpriteCraft</p>
+           <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} SpriteCraft</p>
          </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col md:flex-row gap-4 p-4 bg-secondary/20">
-         {/* Left Side: Generation */}
         <Card className="flex-1 card-pixel">
           <CardHeader>
              <SidebarTrigger className="md:hidden mb-2" />
@@ -236,7 +235,7 @@ export default function Home() {
                 placeholder="e.g., A brave knight with shiny armor, A mystical wizard with a long beard"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="input-pixel min-h-[80px]" // Reduced height a bit
+                className="input-pixel min-h-[80px]"
               />
             </div>
              {generatedSpriteSheet && (
@@ -254,8 +253,8 @@ export default function Home() {
                 </div>
              )}
           </CardContent>
-          <CardFooter className="flex flex-col sm:flex-row gap-2 flex-wrap"> {/* Allow wrapping */}
-            <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel flex-grow sm:flex-grow-0"> {/* Grow on small screens */}
+          <CardFooter className="flex flex-col sm:flex-row gap-2 flex-wrap">
+            <Button onClick={handleGenerateSprite} disabled={isLoading || !uploadedImage || !description} className="btn-pixel flex-grow sm:flex-grow-0">
               {isLoading ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -265,7 +264,7 @@ export default function Home() {
                   Generating...
                 </>
               ) : (
-                'Generate Sheet' // Shorter text
+                'Generate Sheet' 
               )}
             </Button>
             <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={(!generatedSpriteSheet && !uploadedImage) || isLoading}>
@@ -274,26 +273,22 @@ export default function Home() {
           </CardFooter>
         </Card>
 
-         {/* Right Side: Editor and Assembly */}
         <Card className="flex-1 card-pixel flex flex-col">
            <CardHeader>
              <div className="flex justify-between items-center">
                  <CardTitle className="flex items-center gap-2"><Paintbrush /> 2. Edit &amp; Assign Poses</CardTitle>
-                 {/* Remove BG button moved to SpriteEditor Toolbar */}
              </div>
              <CardDescription>Select parts of your sheet, optionally remove the background, and save them for each character pose.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
-              {/* Editor Canvas Area */}
               <div className="flex-grow relative pixel-border bg-white min-h-[300px] md:min-h-0">
-                 {/* Loading overlay removed - handled within SpriteEditor now */}
                 {editorImage ? (
                   <SpriteEditor
                      imageUrl={editorImage}
                      onSaveSprite={handleSaveSprite}
                      spriteSlots={spriteSlots}
-                     key={editorImage} // Force re-render when image changes
-                     onImageUpdate={setEditorImage} // Pass update handler
+                     key={editorImage} 
+                     onImageUpdate={setEditorImage} 
                   />
                  ) : (
                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground p-4 text-center">
@@ -302,7 +297,6 @@ export default function Home() {
                  )}
               </div>
 
-              {/* Sprite Slots Area */}
              <div className="w-full md:w-1/3 space-y-2">
                 <h3 className="font-semibold">Character Poses</h3>
                 <p className="text-xs text-muted-foreground mb-2">Required poses for the game world.</p>
@@ -339,7 +333,7 @@ export default function Home() {
            <CardFooter className="justify-end">
               <Button
                 onClick={handleEnterWorld}
-                disabled={!allSlotsFilled || isLoading} // Removed isRemovingEditorBackground check
+                disabled={!allSlotsFilled || isLoading} 
                 className="btn-pixel-accent"
                 aria-disabled={!allSlotsFilled}
               >
