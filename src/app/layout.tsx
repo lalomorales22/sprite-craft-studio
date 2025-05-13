@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import {Pixelify_Sans} from 'next/font/google'; // Import Pixelify Sans
 import './globals.css';
@@ -20,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${pixelify.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className={`${pixelify.variable} font-sans bg-background text-foreground`}> {/* Removed antialiased */}
         <main className="min-h-screen flex flex-col">
           {children}
         </main>
@@ -29,3 +30,4 @@ export default function RootLayout({
     </html>
   );
 }
+
