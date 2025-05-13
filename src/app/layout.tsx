@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Apply dark class here */}
+    <html lang="en" className="dark">
       <body className={`${pixelify.variable} font-sans antialiased bg-background text-foreground`}>
         <main className="min-h-screen flex flex-col">
           {children}
