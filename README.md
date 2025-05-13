@@ -1,5 +1,51 @@
-# Firebase Studio
+# SpriteCraft Studio
 
-This is a NextJS starter in Firebase Studio.
+SpriteCraft Studio is a Next.js application that allows you to generate and edit 8-bit sprites using AI, and then use them in a simple game world.
 
-To get started, take a look at src/app/page.tsx.
+You can find the project repository on GitHub:
+[https://github.com/your-username/sprite-craft-studio](https://github.com/your-username/sprite-craft-studio)
+
+(Remember to replace `your-username` with your actual GitHub username or organization name.)
+
+## Getting Started
+
+To get started with development:
+
+1.  **Install dependencies:**
+    ```bash
+    npm install
+    # or
+    yarn install
+    # or
+    pnpm install
+    ```
+
+2.  **Set up environment variables:**
+    Create a `.env.local` file in the root of your project and add your Google Generative AI API key:
+    ```env
+    GOOGLE_GENAI_API_KEY=YOUR_API_KEY
+    ```
+
+3.  **Run the development server for Next.js:**
+    ```bash
+    npm run dev
+    # or
+    yarn dev
+    # or
+    pnpm dev
+    ```
+    This will start the Next.js application, typically on `http://localhost:9002`.
+
+4.  **Run the Genkit development server (in a separate terminal):**
+    ```bash
+    npm run genkit:dev
+    # or
+    yarn genkit:dev
+    # or
+    pnpm genkit:dev
+    ```
+    This starts the Genkit development flow server, which is necessary for the AI features to work.
+
+Open [http://localhost:9002](http://localhost:9002) with your browser to see the result.
+
+You can start editing the main page by modifying `src/app/page.tsx`. The Genkit AI flows are located in the `src/ai/flows/` directory.
