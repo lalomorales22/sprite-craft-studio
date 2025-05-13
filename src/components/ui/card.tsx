@@ -10,7 +10,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "card-pixel", // Apply the pixel style class
+      "card-pixel rounded-lg", // Apply the pixel style class and ensure rounding
       className
     )}
     {...props}
@@ -78,5 +78,3 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = "CardFooter"
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
-
-      

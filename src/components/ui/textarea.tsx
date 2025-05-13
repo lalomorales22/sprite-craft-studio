@@ -8,7 +8,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<'tex
     return (
       <textarea
         className={cn(
-          'input-pixel', // Apply the pixel style class
+          'input-pixel rounded-lg', // Apply the pixel style class and ensure rounding
           'flex min-h-[80px] w-full', // Keep original layout styles
            // Merge with incoming className
           className
@@ -22,5 +22,3 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<'tex
 Textarea.displayName = 'Textarea';
 
 export {Textarea};
-
-     

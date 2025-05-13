@@ -22,10 +22,8 @@ const SelectTrigger = React.forwardRef<
     className={cn(
       // Apply pixel input style base
       "input-pixel flex h-10 w-full items-center justify-between px-3 py-2 text-sm",
-      // Remove default border/rounding from input-pixel if present, ensure base styles
-      "border-0 rounded-none", // Override pixel border here, apply specific one below
       // Apply specific pixel border for select trigger
-      "pixel-border",
+      "pixel-border rounded-lg", // Ensure rounded-lg
       // Keep other necessary styles
       "ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className
@@ -84,7 +82,7 @@ const SelectContent = React.forwardRef<
       ref={ref}
       className={cn(
          // Apply pixel border styling
-        "pixel-border bg-popover text-popover-foreground rounded-none", // Ensure no rounding
+        "pixel-border bg-popover text-popover-foreground rounded-lg", // Ensure rounded-lg
         // Keep other necessary styles
         "relative z-50 max-h-96 min-w-[8rem] overflow-hidden shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         position === "popper" &&
@@ -130,8 +128,7 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       // Apply focus/hover styles consistent with theme
-      "relative flex w-full cursor-default select-none items-center rounded-none py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-       // Ensure no rounding on items
+      "relative flex w-full cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", // Use rounded-md for items
       className
     )}
     {...props}
@@ -171,5 +168,3 @@ export {
   SelectScrollUpButton,
   SelectScrollDownButton,
 }
-
-        

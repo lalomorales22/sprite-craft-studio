@@ -12,7 +12,7 @@ import {Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter} f
 import {useToast} from '@/hooks/use-toast';
 import {generateSpriteSheet} from '@/ai/flows/generate-sprite-sheet';
 import Image from 'next/image';
-import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles, Library} from 'lucide-react';
+import {Upload, Paintbrush, Eraser, ZoomIn, ZoomOut, MoveLeft, MoveRight, Footprints, ArrowUp, ArrowDown, User, Armchair, Square, Globe, Sparkles, Library, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import SpriteEditor from '@/components/sprite-editor';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,6 +47,8 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadedImage(reader.result as string);
+        setGeneratedSpriteSheet(null); // Clear previous generated sheet if new one is uploaded
+        setEditorImage(null); // Also clear editor
       };
       reader.readAsDataURL(file);
     }
@@ -208,7 +210,7 @@ export default function Home() {
            <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} SpriteCraft</p>
          </SidebarFooter>
       </Sidebar>
-      <SidebarInset className="flex flex-col md:flex-row gap-4 p-4 bg-secondary/20">
+      <SidebarInset className="flex flex-col gap-4 p-4 bg-background"> {/* Changed to flex-col, removed md:flex-row and bg-secondary/20 */}
         <Card className="flex-1 card-pixel">
           <CardHeader>
              <SidebarTrigger className="md:hidden mb-2" />
@@ -223,7 +225,7 @@ export default function Home() {
               </Label>
               <Input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="input-pixel sr-only" />
                {uploadedImage && (
-                 <div className="mt-2 pixel-border p-1 inline-block bg-white">
+                 <div className="mt-2 pixel-border p-1 inline-block bg-card-foreground/10">
                     <Image src={uploadedImage} alt="Uploaded preview" width={128} height={128} className="object-contain" style={{ imageRendering: 'pixelated' }} />
                  </div>
               )}
@@ -241,7 +243,7 @@ export default function Home() {
              {generatedSpriteSheet && (
                <div className="space-y-2">
                  <Label>Generated Sprite Sheet</Label>
-                  <div className="mt-2 pixel-border p-1 bg-white inline-block">
+                  <div className="mt-2 pixel-border p-1 bg-card-foreground/10 inline-block">
                      <Image src={generatedSpriteSheet} alt="Generated Sprite Sheet" width={256} height={256} className="object-contain" style={{ imageRendering: 'pixelated' }} data-ai-hint="sprite sheet character"/>
                   </div>
                </div>
@@ -264,7 +266,7 @@ export default function Home() {
                   Generating...
                 </>
               ) : (
-                'Generate Sheet' 
+                 <> <Sparkles size={16} className="mr-2"/> Generate Sheet </>
               )}
             </Button>
             <Button onClick={handleSendToEditor} variant="secondary" className="btn-pixel-secondary flex-grow sm:flex-grow-0" disabled={(!generatedSpriteSheet && !uploadedImage) || isLoading}>
@@ -281,14 +283,22 @@ export default function Home() {
              <CardDescription>Select parts of your sheet, optionally remove the background, and save them for each character pose.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow flex flex-col md:flex-row gap-4">
-              <div className="flex-grow relative pixel-border bg-white min-h-[300px] md:min-h-0">
+              <div className="flex-grow relative pixel-border bg-muted/30 min-h-[300px] md:min-h-0 rounded-lg"> {/* Added rounding here */}
                 {editorImage ? (
                   <SpriteEditor
                      imageUrl={editorImage}
                      onSaveSprite={handleSaveSprite}
                      spriteSlots={spriteSlots}
                      key={editorImage} 
-                     onImageUpdate={setEditorImage} 
+                     onImageUpdate={(newUri) => {
+                        setEditorImage(newUri);
+                        // If the editor updates the image (e.g. bg removal), also update the generatedSpriteSheet if it was the source
+                        if (generatedSpriteSheet === editorImage) {
+                            setGeneratedSpriteSheet(newUri);
+                        } else if (uploadedImage === editorImage) {
+                            setUploadedImage(newUri);
+                        }
+                     }}
                   />
                  ) : (
                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground p-4 text-center">
@@ -298,7 +308,7 @@ export default function Home() {
               </div>
 
              <div className="w-full md:w-1/3 space-y-2">
-                <h3 className="font-semibold">Character Poses</h3>
+                <h3 className="font-semibold text-lg">Character Poses</h3>
                 <p className="text-xs text-muted-foreground mb-2">Required poses for the game world.</p>
                 {Object.keys(spriteSlots).map((key) => {
                     const state = key as SpriteState;
@@ -312,19 +322,19 @@ export default function Home() {
                       sitting: <Armchair size={16}/>,
                     };
                     return (
-                      <div key={state} className={`flex items-center gap-2 p-2 pixel-border ${spriteSlots[state] ? 'pixel-border-primary bg-primary/10' : 'bg-muted/50'}`}>
-                        <div className="flex-shrink-0 w-16 h-16 pixel-border bg-white flex items-center justify-center overflow-hidden">
+                      <div key={state} className={`flex items-center gap-2 p-2 pixel-border rounded-lg ${spriteSlots[state] ? 'pixel-border-primary bg-primary/10' : 'bg-muted/50'}`}>
+                        <div className="flex-shrink-0 w-16 h-16 pixel-border bg-card-foreground/10 flex items-center justify-center overflow-hidden rounded-md"> {/* Rounded pose preview */}
                           {spriteSlots[state] ? (
                             <Image src={spriteSlots[state]!} alt={`${state} sprite`} width={64} height={64} style={{ imageRendering: 'pixelated', objectFit: 'contain' }} />
                           ) : (
-                             <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-4xl">?</div>
+                             <div className="w-full h-full bg-muted/30 flex items-center justify-center text-muted-foreground text-4xl rounded-md">?</div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-sm font-medium">
                           {iconMap[state]}
                           <span>{state.charAt(0).toUpperCase() + state.slice(1)}</span>
                         </div>
-                         {spriteSlots[state] && <span className="ml-auto text-green-600">✓</span>}
+                         {spriteSlots[state] && <span className="ml-auto text-green-400">✓</span>}
                       </div>
                     );
                   })}

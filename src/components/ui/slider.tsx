@@ -18,21 +18,19 @@ const Slider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-none bg-secondary pixel-border"> {/* Apply pixel border */}
+    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-lg bg-secondary pixel-border"> {/* Apply pixel border and new radius */}
       <SliderPrimitive.Range className="absolute h-full bg-primary" />
     </SliderPrimitive.Track>
     <SliderPrimitive.Thumb className={cn(
        // Base thumb styles
-       "block h-5 w-5 rounded-none ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+       "block h-5 w-5 rounded-lg ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer", // Use new radius
        // Pixel border style
-       "bg-background pixel-border-primary border-0", // Remove default border, use pixel border
-       // Hover/Focus state - maybe change border color?
-       "group-hover:pixel-border-accent group-focus:pixel-border-accent" // Example: Change border to accent on hover/focus
+       "bg-background pixel-border-primary border-0", 
+       // Hover/Focus state
+       "group-hover:pixel-border-accent group-focus:pixel-border-accent" 
        )} />
   </SliderPrimitive.Root>
 ))
 Slider.displayName = SliderPrimitive.Root.displayName
 
 export { Slider }
-
-         

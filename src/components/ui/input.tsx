@@ -7,8 +7,8 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {
     // Apply input-pixel class unless the type is 'color'
     const inputClass = type === 'color'
-      ? "h-10 w-10 p-1 border border-input rounded-md cursor-pointer" // Basic style for color input
-      : "input-pixel"; // Apply pixel style for others
+      ? "h-10 w-10 p-1 border border-input rounded-lg cursor-pointer" // Style for color input with new radius
+      : "input-pixel rounded-lg"; // Apply pixel style with new radius
 
     return (
       <input
@@ -30,5 +30,3 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
 Input.displayName = "Input"
 
 export { Input }
-
-    

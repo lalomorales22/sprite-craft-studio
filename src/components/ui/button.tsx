@@ -12,20 +12,20 @@ const buttonVariants = cva(
       variant: {
         default: "btn-pixel", 
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md", 
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90", 
         outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md",
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "btn-pixel-secondary", 
-        ghost: "hover:bg-accent hover:text-accent-foreground rounded-md",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         accent: "btn-pixel-accent", 
-        primary: "btn-pixel", // Added primary pixel variant, same as default
+        primary: "btn-pixel", 
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 px-3 text-xs", 
         lg: "h-11 px-8",
-        icon: "h-10 w-10 rounded-md", 
+        icon: "h-10 w-10", 
       },
     },
     defaultVariants: {
@@ -50,7 +50,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp
         className={cn(
             buttonVariants({ variant, size, className }),
-            isPixelVariant ? "rounded-none" : "rounded-md" 
+            isPixelVariant ? "rounded-lg" : "rounded-lg" // Apply rounded-lg to all variants
             )}
         ref={ref}
         {...props}

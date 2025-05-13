@@ -47,7 +47,7 @@ body {
     --chart-4: 180 40% 40%;
     --chart-5: 336 87% 80%;
 
-    --radius: 0.3rem; /* Slightly sharper corners */
+    --radius: 0.75rem; /* More rounded corners */
 
     --sidebar-background: 0 0% 90%;
     --sidebar-foreground: 0 0% 20%;
@@ -60,49 +60,51 @@ body {
   }
 
   .dark {
-    /* Define dark mode colors if needed, derived from the light theme */
-    --background: 210 20% 12%;
-    --foreground: 210 20% 90%;
+    --background: 0 0% 4%; /* Almost black */
+    --foreground: 0 0% 95%; /* Light gray / Off-white */
 
-    --card: 210 20% 12%;
-    --card-foreground: 210 20% 90%;
+    --card: 0 0% 8%; /* Slightly lighter than background for cards */
+    --card-foreground: 0 0% 95%;
 
-    --popover: 210 20% 10%;
-    --popover-foreground: 210 20% 90%;
+    --popover: 0 0% 10%; /* Slightly lighter for popovers */
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 180 100% 35%; /* Slightly lighter teal for dark mode */
-    --primary-foreground: 180 100% 95%;
+    --primary: 60 100% 50%; /* Vibrant Yellow for 8-bit feel */
+    --primary-foreground: 0 0% 5%; /* Dark text on bright primary */
 
-    --secondary: 0 0% 30%; /* Darker gray */
-    --secondary-foreground: 0 0% 80%;
+    --secondary: 240 50% 30%; /* Muted Blue for secondary actions */
+    --secondary-foreground: 0 0% 85%; /* Light text on secondary */
 
-    --muted: 210 20% 20%;
-    --muted-foreground: 210 20% 60%;
+    --muted: 0 0% 15%; /* Darker muted tones */
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 336 100% 65%; /* Slightly adjusted pink */
-    --accent-foreground: 0 0% 5%;
+    --accent: 330 100% 55%; /* Bright Pink/Magenta for accents */
+    --accent-foreground: 0 0% 5%; /* Dark text on accent */
 
-    --destructive: 0 70% 50%;
+    --destructive: 0 80% 55%; /* Bright Red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 25%;
-    --input: 0 0% 22%;
-    --ring: 180 100% 35%;
+    --border: 0 0% 15%; /* Subtle border for dark theme */
+    --input: 0 0% 10%; /* Dark input background */
+    --ring: 60 100% 50%; /* Primary color for focus rings */
 
-    --chart-1: 180 70% 50%;
-    --chart-2: 336 60% 60%;
-    --chart-3: 0 0% 50%;
-    --chart-4: 180 40% 30%;
-    --chart-5: 336 80% 70%;
+    /* chart colors can be brighter for dark theme */
+    --chart-1: 60 70% 60%;
+    --chart-2: 330 70% 60%;
+    --chart-3: 0 0% 70%;
+    --chart-4: 240 50% 50%;
+    --chart-5: 120 70% 50%; /* Bright Green */
 
-    --sidebar-background: 0 0% 15%;
-    --sidebar-foreground: 0 0% 85%;
-    --sidebar-primary: 180 100% 35%;
-    --sidebar-primary-foreground: 180 100% 95%;
-    --sidebar-accent: 0 0% 25%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 0 0% 20%;
-    --sidebar-ring: 180 100% 35%;
+    --radius: 0.75rem; /* More rounded corners (already defined in :root, can be overridden here if needed) */
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 60 100% 50%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 60 100% 50%;
   }
 }
 
@@ -123,58 +125,78 @@ body {
     border-width: 4px;
     border-image-slice: 2;
     border-image-width: 2;
-    border-image-repeat: stretch;
-    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23808080" /></svg>'); /* Muted Gray */
+    border-image-repeat: stretch; /* or 'round' if stretch looks odd with border-radius */
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="hsl(var(--border))" /></svg>');
     border-image-outset: 0;
   }
   .pixel-border-accent {
-     border-style: solid;
+    border-style: solid;
     border-width: 4px;
     border-image-slice: 2;
     border-image-width: 2;
     border-image-repeat: stretch;
-    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23FF69B4" /></svg>'); /* Accent Pink */
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="hsl(var(--accent))" /></svg>');
     border-image-outset: 0;
   }
    .pixel-border-primary {
-     border-style: solid;
+    border-style: solid;
     border-width: 4px;
     border-image-slice: 2;
     border-image-width: 2;
     border-image-repeat: stretch;
-    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="%23008080" /></svg>'); /* Primary Teal */
+    border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="hsl(var(--primary))" /></svg>');
     border-image-outset: 0;
   }
 
-  /* Ensure buttons have a pixelated feel */
+  /* Ensure buttons have a pixelated feel but respect new radius */
    .btn-pixel {
-      @apply bg-primary text-primary-foreground hover:bg-primary/90 pixel-border-primary px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+      @apply bg-primary text-primary-foreground hover:bg-primary/90 pixel-border-primary px-4 py-2 shadow-[4px_4px_0px_0px_hsla(var(--foreground),0.2)];
       transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
    }
    .btn-pixel:active {
-      @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+      @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_hsla(var(--foreground),0.2)];
    }
    .btn-pixel-secondary {
-       @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 pixel-border px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+       @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 pixel-border px-4 py-2 shadow-[4px_4px_0px_0px_hsla(var(--foreground),0.2)];
        transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
    }
     .btn-pixel-secondary:active {
-       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_hsla(var(--foreground),0.2)];
    }
     .btn-pixel-accent {
-       @apply bg-accent text-accent-foreground hover:bg-accent/90 pixel-border-accent px-4 py-2 rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)];
+       @apply bg-accent text-accent-foreground hover:bg-accent/90 pixel-border-accent px-4 py-2 shadow-[4px_4px_0px_0px_hsla(var(--foreground),0.2)];
        transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
    }
      .btn-pixel-accent:active {
-       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)];
+       @apply translate-x-[2px] translate-y-[2px] shadow-[2px_2px_0px_0px_hsla(var(--foreground),0.2)];
    }
 
    .input-pixel {
-     @apply bg-background border-input pixel-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm rounded-none;
+     @apply bg-input border-input pixel-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm rounded-[--radius];
    }
 
     .card-pixel {
-     @apply bg-card text-card-foreground pixel-border rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)];
+     @apply bg-card text-card-foreground pixel-border rounded-[--radius] shadow-[4px_4px_0px_0px_hsla(var(--foreground),0.1)];
    }
+
+    .pixel-border-b {
+        border-bottom-style: solid;
+        border-bottom-width: 4px;
+        border-image-slice: 2;
+        border-image-width: 0 0 2 0; /* Apply only to bottom */
+        border-image-repeat: stretch;
+        border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="hsl(var(--border))" /></svg>');
+        border-image-outset: 0;
+    }
+    .pixel-border-t {
+        border-top-style: solid;
+        border-top-width: 4px;
+        border-image-slice: 2;
+        border-image-width: 2 0 0 0; /* Apply only to top */
+        border-image-repeat: stretch;
+        border-image-source: url('data:image/svg+xml;utf8,<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0 H 2 V 2 H 0 V 0 M 2 0 H 4 V 2 H 2 V 0 M 4 0 H 6 V 2 H 4 V 0 M 0 2 H 2 V 4 H 0 V 2 M 4 2 H 6 V 4 H 4 V 2 M 0 4 H 2 V 6 H 0 V 4 M 2 4 H 4 V 6 H 2 V 4 M 4 4 H 6 V 6 H 4 V 4" fill="hsl(var(--border))" /></svg>');
+        border-image-outset: 0;
+    }
+
 
 }
