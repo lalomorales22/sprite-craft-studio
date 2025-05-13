@@ -1,11 +1,11 @@
 # SpriteCraft Studio
+![Screenshot 2025-05-13 at 1 00 54 AM](https://github.com/user-attachments/assets/07e3e21d-019b-456a-8864-b58a77f75279)
 
 SpriteCraft Studio is a Next.js application that allows you to generate and edit 8-bit sprites using AI, and then use them in a simple game world.
 
 You can find the project repository on GitHub:
-[https://github.com/lalomorales22/sprite-craft-studio](https://github.com/lalomorales22/sprite-craft-studio)
+git clone https://github.com/lalomorales22/sprite-craft-studio.git
 
-(Remember to replace `your-username` with your actual GitHub username or organization name.)
 
 ## Getting Started
 
